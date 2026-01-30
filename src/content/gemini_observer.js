@@ -246,7 +246,21 @@ async function checkTurnCompletion() {
     currentTurn.responseNode = responseNode;
 
     // 3. Extract Content
-    const responseText = domToMarkdown(responseNode).trim();
+    let contentNode = responseNode;
+    const markdownNode = responseNode.querySelector('.markdown');
+    if (markdownNode) {
+        contentNode = markdownNode;
+    }
+
+    // Fallback: if no markdown class, look for specific message content containers
+    if (!markdownNode) {
+        const messageContent = responseNode.querySelector('.message-content');
+        if (messageContent) contentNode = messageContent;
+    }
+
+    const responseText = domToMarkdown(contentNode).trim();
+    console.log(`Artifact Sync: Extracted text length: ${responseText.length} from tag: ${contentNode.tagName}.${contentNode.className}`);
+
 
     // 4. Extract Artifacts (Images in Response)
     const responseImages = [];
