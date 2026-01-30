@@ -274,9 +274,22 @@ function handleMutation(mutations) {
             continue;
           }
 
-          // Check against LAST SAVED prompt (prevent double-save of same turn)
+          // DEDUPLICATION 2: Previously Saved
           if (newText === lastProcessedPrompt) {
             continue;
+          }
+
+          // DEDUPLICATION 3: History Check (Crucial for loop prevention)
+          // Only pay attention to the VERY LAST user message in the DOM.
+          // If we detect an old message re-rendering, we must ignore it.
+          const allUserNodes = document.querySelectorAll('.user-query-bubble-with-background, [data-message-author-role="user"]');
+          if (allUserNodes.length > 0) {
+            const lastUserNode = allUserNodes[allUserNodes.length - 1];
+            // Use contains/equals check
+            if (lastUserNode !== userMatch && !lastUserNode.contains(userMatch) && lastUserNode.innerText.trim() !== newText) {
+              // console.log("Artifact Sync: Ignoring historic message update.");
+              continue;
+            }
           }
 
           console.log("Artifact Sync: User Message Detected!", userMatch);
