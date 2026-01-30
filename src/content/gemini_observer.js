@@ -74,6 +74,7 @@ const isModel = (n) => {
 
     // Structure-based heuristic: If it has "text" class or looks like a message
     if (n.classList.contains('markdown')) return true;
+    if (n.tagName === 'MODEL-RESPONSE' || n.tagName === 'model-response') return true;
 
     return false;
 };
@@ -84,7 +85,7 @@ function findResponseFallback(userNode) {
     // 1. Sibling Scan (Specific)
     let next = userNode.nextElementSibling;
     let attempts = 0;
-    while (next && attempts < 10) {
+    while (next && attempts < 50) {
         console.log("Artifact Sync: Scanning sibling:", next.tagName, next.className);
 
         // Track Pending/Model tags as backups
@@ -112,7 +113,7 @@ function findResponseFallback(userNode) {
 
         let pNext = parent.nextElementSibling;
         let pAttempts = 0;
-        while (pNext && pAttempts < 10) {
+        while (pNext && pAttempts < 50) {
             console.log(`Artifact Sync: Scanning uncle (L${i}):`, pNext.tagName, pNext.className);
 
             // Track Pending/Model tags as backups
