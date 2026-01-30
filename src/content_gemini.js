@@ -262,6 +262,15 @@ function handleMutation(mutations) {
         }
 
         if (userMatch) {
+          // DEDUPLICATION: If we are already recording this exact node, ignore updates to it.
+          if (currentTurn.status === 'RECORDING' && currentTurn.promptNode === userMatch) {
+            continue;
+          }
+          // Text-based dedupe (if node ref changes but text is same recent prompt)
+          if (currentTurn.status === 'RECORDING' && userMatch.innerText === lastProcessedPrompt) {
+            continue;
+          }
+
           console.log("Artifact Sync: User Message Detected!", userMatch);
           if (currentTurn.status === 'SAVING') continue;
 
