@@ -486,6 +486,7 @@ function resetTurn() {
     currentTurn.responseNode = null;
     currentTurn.pendingImages = [];
     currentTurn.pendingAttachments = [];
+    currentTurn.failedNodes = new Set();
 }
 
 // Visual Debug Helper
