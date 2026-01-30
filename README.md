@@ -16,6 +16,7 @@
 
 *   **Browser Dependency**: The extension relies on the DOM structure of the AI provider's web interface. If Gemini or ChatGPT significantly changes their HTML layout, the scraper may break until updated.
 *   **Local File Organization**: When using the "Local" storage method with the default "Downloads" strategy, the extension is limited by Chrome's download API. It creates subfolders within your default Downloads directory but cannot write outside of it.
+    > **💡 Tip (Workaround):** You can change your computer's default Download location in Chrome Settings (`chrome://settings/downloads`) to any specific drive or volume you want. Artifact Sync will then automatically save files to that new location.
 *   **PDF Generation**: PDF generation is done client-side and may struggle with extremely long conversations or complex layouts.
 
 ### 🛑 Deprecated Support: Claude.ai
