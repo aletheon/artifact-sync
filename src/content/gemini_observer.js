@@ -67,8 +67,10 @@ const isModel = (n) => {
     if (n.getAttribute('data-message-author-role') === 'model') return true;
     if (n.classList.contains('model-query-bubble')) return true;
     if (n.classList.contains('message-content')) return true;
-    if (n.tagName === 'PENDING-RESPONSE') return true;
-    if (n.tagName === 'MODEL-RESPONSE') return true;
+
+    // We handle PENDING-RESPONSE manually in the fallback logic now
+    // to prevent greedy matching on empty placeholders.
+    // if (n.tagName === 'PENDING-RESPONSE') return true; 
 
     // Structure-based heuristic: If it has "text" class or looks like a message
     if (n.classList.contains('markdown')) return true;
@@ -77,11 +79,19 @@ const isModel = (n) => {
 };
 
 function findResponseFallback(userNode) {
+    let pendingCandidate = null;
+
     // 1. Sibling Scan (Specific)
     let next = userNode.nextElementSibling;
     let attempts = 0;
     while (next && attempts < 10) {
         console.log("Artifact Sync: Scanning sibling:", next.tagName, next.className);
+
+        // Track Pending/Model tags as backups
+        if (next.tagName === 'PENDING-RESPONSE' || next.tagName === 'MODEL-RESPONSE') {
+            pendingCandidate = next;
+        }
+
         if (isModel(next)) {
             console.log("Artifact Sync: Found response via Sibling Scan!", next);
             return next;
@@ -104,6 +114,12 @@ function findResponseFallback(userNode) {
         let pAttempts = 0;
         while (pNext && pAttempts < 10) {
             console.log(`Artifact Sync: Scanning uncle (L${i}):`, pNext.tagName, pNext.className);
+
+            // Track Pending/Model tags as backups
+            if (pNext.tagName === 'PENDING-RESPONSE' || pNext.tagName === 'MODEL-RESPONSE') {
+                pendingCandidate = pNext;
+            }
+
             if (isModel(pNext)) {
                 console.log("Artifact Sync: Found response via Uncle Scan!", pNext);
                 return pNext;
@@ -130,6 +146,11 @@ function findResponseFallback(userNode) {
             pAttempts++;
         }
         parent = parent.parentElement;
+    }
+
+    if (pendingCandidate) {
+        console.log("Artifact Sync: No content found, falling back to PENDING-RESPONSE candidate.", pendingCandidate);
+        return pendingCandidate;
     }
 
     // 3. Last Resort (Global Specific) - REMOVED
