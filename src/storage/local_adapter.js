@@ -5,19 +5,27 @@ export class LocalAdapter {
         this.downloadsPending = 0;
     }
 
-    async save(payload) {
+    async save(payload, settings) {
         console.log("Artifact Sync: LocalAdapter saving turn...", payload);
         const { title, prompt, response, timestamp, safePrompt, images, attachments, source } = payload;
 
         // 1. Create Folder Path
-        // "Artifact Sync / {Source} / {Title} /"
-        // Since Chrome Downloads API doesn't support absolute paths, we rely on relative paths inside Downloads.
-        const baseFolder = `Artifact Sync/${source}/${title.replace(/[:\/]/g, '-')}`;
+        // "{Root} / {Source} / {Title} /"
+        const rootName = settings.rootFolderName || "Artifact Sync";
+        const baseFolder = `${rootName}/${source}/${title.replace(/[:\/]/g, '-')}`;
 
         // 2. Save Conversation Log (Markdown)
         const mdContent = this.generateMarkdown(payload);
         const mdFilename = `${baseFolder}/${safePrompt}_${timestamp}.md`;
         await this.download(mdContent, mdFilename, 'text/markdown');
+
+        // 2b. Save PDF (If enabled)
+        if (settings.pdfEnabled) {
+            // TODO: Implement PDF Generation Logic
+            // For now, we save a text file indicating PDF placeholder
+            // const pdfContent = "PDF Generation Not Yet Implemented\n\n" + mdContent;
+            // await this.download(pdfContent, `${baseFolder}/pdfs/${safePrompt}_${timestamp}.pdf`, 'application/pdf');
+        }
 
         // 3. Save Attachments (User Uploads)
         if (attachments && attachments.length > 0) {

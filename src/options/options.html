@@ -1,18 +1,40 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <title>Artifact Sync Options</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 500px; }
-    label { display: block; margin-bottom: 15px; cursor: pointer; }
-    select { padding: 5px; }
-    h2 { color: #333; }
-    .status { margin-top: 20px; color: green; display: none; }
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      max-width: 500px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 15px;
+      cursor: pointer;
+    }
+
+    select {
+      padding: 5px;
+    }
+
+    h2 {
+      color: #333;
+    }
+
+    .status {
+      margin-top: 20px;
+      color: green;
+      display: none;
+    }
   </style>
 </head>
+
 <body>
   <h2>Artifact Sync Settings</h2>
-  
+
   <label>
     <strong>Storage Location:</strong><br>
     <select id="storageMode">
@@ -21,9 +43,25 @@
     </select>
   </label>
 
-  <button id="save">Save Settings</button>
+  <label>
+    <strong>Root Folder Name:</strong><br>
+    <input type="text" id="rootFolderName" placeholder="Artifact Sync" value="Artifact Sync"
+      style="width: 100%; padding: 5px;">
+    <small style="color: #666;">Files will be saved inside Downloads/&lt;Name&gt;</small>
+  </label>
+
+  <label style="margin-top: 15px; display: flex; align-items: center;">
+    <input type="checkbox" id="pdfEnabled">
+    <strong style="margin-left: 10px;">Enable PDF Output</strong>
+  </label>
+  <small style="color: #666; display: block; margin-bottom: 15px;">Save a PDF copy of the conversation alongside the
+    Markdown.</small>
+
+  <button id="save" style="padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer;">Save
+    Settings</button>
   <div id="status" class="status">Settings Saved!</div>
 
   <script src="options.js"></script>
 </body>
+
 </html>
