@@ -67,6 +67,8 @@ const isModel = (n) => {
     if (n.getAttribute('data-message-author-role') === 'model') return true;
     if (n.classList.contains('model-query-bubble')) return true;
     if (n.classList.contains('message-content')) return true;
+    if (n.tagName === 'PENDING-RESPONSE') return true;
+    if (n.tagName === 'MODEL-RESPONSE') return true;
 
     // Structure-based heuristic: If it has "text" class or looks like a message
     if (n.classList.contains('markdown')) return true;
@@ -82,6 +84,11 @@ function findResponseFallback(userNode) {
         console.log("Artifact Sync: Scanning sibling:", next.tagName, next.className);
         if (isModel(next)) {
             console.log("Artifact Sync: Found response via Sibling Scan!", next);
+            return next;
+        }
+        // Deep check for markdown if the tag itself isn't obvious
+        if (next.querySelector('.markdown')) {
+            console.log("Artifact Sync: Found response via Sibling->Markdown Scan!", next);
             return next;
         }
         next = next.nextElementSibling;
@@ -112,6 +119,12 @@ function findResponseFallback(userNode) {
                     console.log("Artifact Sync: Found response via Uncle->Role Scan!", roleModel);
                     return roleModel;
                 }
+                // Generic Markdown Check (Strong Fallback)
+                const markdown = pNext.querySelector('.markdown');
+                if (markdown) {
+                    console.log("Artifact Sync: Found response via Uncle->Markdown Scan!", markdown);
+                    return markdown;
+                }
             }
             pNext = pNext.nextElementSibling;
             pAttempts++;
@@ -124,7 +137,6 @@ function findResponseFallback(userNode) {
     // if the new response hadn't rendered instantly.
     // We now strictly require the response to be a Sibling or Cousin (Parent's Sibling).
     // If we don't find it, we return null, which causes 'checkTurnCompletion' to wait and retry.
-
     /* 
     const allModelNodes = document.querySelectorAll('[data-message-author-role="model"], .model-query-bubble, .message-content');
     for (const modelNode of allModelNodes) {
