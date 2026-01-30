@@ -79,7 +79,7 @@ function findResponseFallback(userNode) {
     let next = userNode.nextElementSibling;
     let attempts = 0;
     while (next && attempts < 10) {
-        // console.log("Artifact Sync: Scanning sibling:", next.tagName, next.className);
+        console.log("Artifact Sync: Scanning sibling:", next.tagName, next.className);
         if (isModel(next)) {
             console.log("Artifact Sync: Found response via Sibling Scan!", next);
             return next;
@@ -93,7 +93,7 @@ function findResponseFallback(userNode) {
     for (let i = 0; i < 4 && parent && parent.tagName !== 'MAIN'; i++) {
         let pNext = parent.nextElementSibling;
         while (pNext) {
-            // console.log("Artifact Sync: Scanning uncle:", pNext.tagName, pNext.className);
+            console.log("Artifact Sync: Scanning uncle:", pNext.tagName, pNext.className);
             if (isModel(pNext)) {
                 console.log("Artifact Sync: Found response via Uncle Scan!", pNext);
                 return pNext;
@@ -166,6 +166,7 @@ async function checkTurnCompletion() {
     if (currentTurn.status !== 'RECORDING') return;
 
     const promptText = currentTurn.promptNode.innerText.trim();
+    console.log("Artifact Sync: Checking turn for prompt node:", currentTurn.promptNode.tagName, currentTurn.promptNode.className);
 
     // 1. Locate Response Node
     let responseNode = currentTurn.responseNode;
