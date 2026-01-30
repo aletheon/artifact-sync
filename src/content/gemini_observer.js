@@ -14,7 +14,8 @@ const currentTurn = {
     lastUpdate: 0,
     lastLength: 0,
     emptyChecks: 0,
-    failedNodes: new Set()
+    failedNodes: new Set(),
+    pendingFailures: 0
 };
 
 const DEBOUNCE_TIME = 2000;
@@ -195,7 +196,11 @@ function findResponseFallback(userNode) {
 
         // Track Pending/Model tags as backups
         if (next.tagName === 'PENDING-RESPONSE' || next.tagName === 'MODEL-RESPONSE') {
-            if (!next.getAttribute('data-as-failed')) pendingCandidate = next;
+            if (currentTurn.pendingFailures < 3) {
+                if (!next.getAttribute('data-as-failed')) pendingCandidate = next;
+            } else {
+                console.log("Artifact Sync: Ignoring PENDING-RESPONSE due to repeated failures.");
+            }
         }
 
         if (isModel(next)) {
@@ -239,7 +244,9 @@ function findResponseFallback(userNode) {
 
             // Track Pending/Model tags as backups
             if (pNext.tagName === 'PENDING-RESPONSE' || pNext.tagName === 'MODEL-RESPONSE') {
-                if (!pNext.getAttribute('data-as-failed')) pendingCandidate = pNext;
+                if (currentTurn.pendingFailures < 3) {
+                    if (!pNext.getAttribute('data-as-failed')) pendingCandidate = pNext;
+                }
             }
 
             if (isModel(pNext)) {
@@ -407,10 +414,16 @@ async function checkTurnCompletion() {
 
         if (currentTurn.emptyChecks > 5) {
             console.log("Artifact Sync: Response node text persistently empty. Marking failed (DOM) and rescanning...");
+
             // Mark the DOM node itself so we don't pick it up again
             if (currentTurn.responseNode) {
+                if (currentTurn.responseNode.tagName === 'PENDING-RESPONSE') {
+                    currentTurn.pendingFailures++;
+                    console.log(`Artifact Sync: PENDING-RESPONSE failure count: ${currentTurn.pendingFailures}`);
+                }
+
                 currentTurn.responseNode.setAttribute('data-as-failed', 'true');
-                console.log("Artifact Sync: Abandoned Node HTML:", currentTurn.responseNode.outerHTML.substring(0, 150));
+                // console.log("Artifact Sync: Abandoned Node HTML:", currentTurn.responseNode.outerHTML.substring(0, 150));
             }
 
             currentTurn.responseNode = null;
@@ -505,6 +518,7 @@ function resetTurn() {
     currentTurn.pendingImages = [];
     currentTurn.pendingAttachments = [];
     currentTurn.failedNodes = new Set();
+    currentTurn.pendingFailures = 0;
 }
 
 // Visual Debug Helper
