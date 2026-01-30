@@ -272,6 +272,7 @@ function finishTurn() {
 
 
   // 2. Find Response
+  const responseNode = findResponseAfter(currentTurn.promptNode);
 
   if (!responseNode) {
     if (now - currentTurn.startTime > MAX_WAIT_TIME) {
