@@ -178,6 +178,20 @@ function findResponseFallback(userNode) {
     let next = userNode.nextElementSibling;
     let attempts = 0;
     while (next && attempts < 50) {
+        // CHECK FOR REDEMPTION: Even if blacklisted/failed, is it populated now?
+        const textLen = next.innerText ? next.innerText.trim().length : 0;
+        const hasImgs = next.querySelector('img');
+
+        if (textLen > 20 || hasImgs) {
+            if (next.getAttribute('data-as-failed')) {
+                console.log(`Artifact Sync: Blacklisted node REDEEMED (Len: ${textLen}). Un-marking.`, next);
+                next.removeAttribute('data-as-failed');
+            }
+            // We don't return immediately here; we let it fall through to the isModel/PENDING check logic
+            // But actually, if it's populated, it's likely the response. 
+            // Let's rely on the existing PENDING-RESPONSE capture logic which is now reachable since we removed the attribute.
+        }
+
         // Skip blacklisted nodes (DOM attribute)
         if (next.getAttribute('data-as-failed')) {
             next = next.nextElementSibling;
@@ -197,10 +211,7 @@ function findResponseFallback(userNode) {
         // Track Pending/Model tags as backups
         if (next.tagName === 'PENDING-RESPONSE' || next.tagName === 'MODEL-RESPONSE') {
             // CRITICAL FIX: If it is actually populated now, TAKE IT!
-            const textLen = next.innerText ? next.innerText.trim().length : 0;
-            const hasImgs = next.querySelector('img');
-
-            if (textLen > 20 || hasImgs) {
+            if (textLen > 20 || hasImgs) { // Re-use calculated values
                 console.log(`Artifact Sync: PENDING-RESPONSE became valid (Len: ${textLen}). Capturing!`, next);
                 return next;
             }
@@ -242,6 +253,17 @@ function findResponseFallback(userNode) {
         let pNext = parent.nextElementSibling;
         let pAttempts = 0;
         while (pNext && pAttempts < 50) {
+            // CHECK FOR REDEMPTION: Even if blacklisted/failed, is it populated now?
+            const textLen = pNext.innerText ? pNext.innerText.trim().length : 0;
+            const hasImgs = pNext.querySelector('img');
+
+            if (textLen > 20 || hasImgs) {
+                if (pNext.getAttribute('data-as-failed')) {
+                    console.log(`Artifact Sync: Blacklisted Uncle REDEEMED (Len: ${textLen}). Un-marking.`, pNext);
+                    pNext.removeAttribute('data-as-failed');
+                }
+            }
+
             // Skip blacklisted nodes
             if (pNext.getAttribute('data-as-failed') || currentTurn.failedNodes.has(pNext)) {
                 pNext = pNext.nextElementSibling;
@@ -253,9 +275,7 @@ function findResponseFallback(userNode) {
             // Track Pending/Model tags as backups
             if (pNext.tagName === 'PENDING-RESPONSE' || pNext.tagName === 'MODEL-RESPONSE') {
                 // CRITICAL FIX: If it is actually populated now, TAKE IT!
-                const textLen = pNext.innerText ? pNext.innerText.trim().length : 0;
-                const hasImgs = pNext.querySelector('img');
-
+                // Re-use calculated values
                 if (textLen > 20 || hasImgs) {
                     console.log(`Artifact Sync: PENDING-RESPONSE (Uncle) became valid (Len: ${textLen}). Capturing!`, pNext);
                     return pNext;
