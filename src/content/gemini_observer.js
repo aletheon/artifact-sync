@@ -393,8 +393,13 @@ async function checkTurnCompletion() {
         console.log(`Artifact Sync: Response incomplete (Len: ${responseText.length}, Imgs: ${responseImages.length}). Check ${currentTurn.emptyChecks}/5.`);
 
         if (currentTurn.emptyChecks > 5) {
-            console.log("Artifact Sync: Response node text persistently empty. Blacklisting and rescanning...");
-            currentTurn.failedNodes.add(currentTurn.responseNode);
+            console.log("Artifact Sync: Response node text persistently empty. Marking failed (DOM) and rescanning...");
+            // Mark the DOM node itself so we don't pick it up again
+            if (currentTurn.responseNode) {
+                currentTurn.responseNode.setAttribute('data-as-failed', 'true');
+                console.log("Artifact Sync: Abandoned Node HTML:", currentTurn.responseNode.outerHTML.substring(0, 150));
+            }
+
             currentTurn.responseNode = null;
             currentTurn.emptyChecks = 0;
             currentTurn.timer = setTimeout(checkTurnCompletion, 200);
