@@ -13,22 +13,25 @@ export class LocalAdapter {
         const rootName = settings.rootFolderName || "Artifact Sync";
         const baseFolder = `${rootName}/${source}/${title.replace(/[:\/]/g, '-')}`;
 
-        // 2. Save Conversation Log (Markdown)
-        const mdContent = this.generateMarkdown(payload);
-        const mdFilename = `${baseFolder}/${safePrompt}_${timestamp}.md`;
-        await this.download(mdContent, mdFilename, 'text/markdown');
-
-        // 2b. Save PDF (If enabled)
+        // 2. Save Logic (Exclusive: PDF or Markdown)
         if (settings.pdfEnabled) {
+            // OPTION A: Save PDF
             try {
-                console.log("Artifact Sync: Generating PDF...");
+                console.log("Artifact Sync: Generating PDF (PDF Enabled)...");
                 const pdfBlob = await this.generatePdf(payload);
-                const pdfFilename = `${baseFolder}/pdfs/${safePrompt}_${timestamp}.pdf`;
+                const pdfFilename = `${baseFolder}/${safePrompt}_${timestamp}.pdf`;
                 await this.downloadBlob(pdfBlob, pdfFilename);
                 console.log("Artifact Sync: PDF saved.");
             } catch (err) {
                 console.error("Artifact Sync: PDF Generation failed", err);
+                // Fallback to Markdown contextually? For now user requested strict exclusive.
             }
+        } else {
+            // OPTION B: Save Markdown (Default)
+            console.log("Artifact Sync: Saving Markdown (PDF Disabled)...");
+            const mdContent = this.generateMarkdown(payload);
+            const mdFilename = `${baseFolder}/${safePrompt}_${timestamp}.md`;
+            await this.download(mdContent, mdFilename, 'text/markdown');
         }
 
         // 3. Save Attachments (User Uploads)
