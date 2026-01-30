@@ -95,30 +95,20 @@ function findResponseFallback(userNode) {
         parent = parent.parentElement;
     }
 
-    // 3. Last Resort (Global Specific)
+    // 3. Last Resort (Global Specific) - REMOVED
+    // The Global Scan was too aggressive and started grabbing *previous* history nodes
+    // if the new response hadn't rendered instantly.
+    // We now strictly require the response to be a Sibling or Cousin (Parent's Sibling).
+    // If we don't find it, we return null, which causes 'checkTurnCompletion' to wait and retry.
+
+    /* 
     const allModelNodes = document.querySelectorAll('[data-message-author-role="model"], .model-query-bubble, .message-content');
     for (const modelNode of allModelNodes) {
-        if (userNode.compareDocumentPosition(modelNode) & Node.DOCUMENT_POSITION_FOLLOWING) {
-            console.log("Artifact Sync: Link established via Global Scan.");
-            return modelNode;
-        }
+        // ...
     }
+    */
 
-    // 4. BLIND STRUCTURAL FALLBACK (New)
-    // If specific selectors failed, find the first substantial sibling in the DOM flow.
-    // We assume the model response comes *after* the user node.
-    // We skip "Searching..." or tiny nodes.
-
-    // Try scanning global "markdown" nodes after user
-    const markdownNodes = document.querySelectorAll('.markdown');
-    for (const md of markdownNodes) {
-        if (userNode.compareDocumentPosition(md) & Node.DOCUMENT_POSITION_FOLLOWING) {
-            // Basic sanity check: Is it reasonably close? 
-            // (We accept it for now as it's better than nothing)
-            console.log("Artifact Sync: Link established via Blind Structural Scan (Markdown class).");
-            return md;
-        }
-    }
+    return null;
 
     return null;
 }
