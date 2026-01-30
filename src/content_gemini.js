@@ -1,182 +1,121 @@
-// content.js
-console.log("Artifact Sync: Logic v20 (Vicinity Scan) loaded.");
+// content_gemini.js
+console.log("Artifact Sync: Gemini Scraper Loaded (v2.1 - Cache System)");
 
-let currentTurn = {
-  promptNode: null,
-  promptText: "",
-  startTime: 0,
-  lastUpdate: 0,
-  timer: null,
-  status: 'IDLE',
-  pendingImages: [],
-  pendingAttachments: []
-};
-
-// Global state
 let lastProcessedPrompt = "";
 let lastSavedResponse = "";
-const DEBOUNCE_TIME = 4000;
-const MAX_WAIT_TIME = 180000;
+const filenameCache = new Map(); // Store blob:URL -> "filename.ext"
 
-// --- MARKDOWN CONVERTER ---
-function cleanText(text) {
-  return text.replace(/\s+/g, ' ').trim();
+const currentTurn = {
+  status: 'IDLE', // IDLE, RECORDING, SAVING
+  promptNode: null,
+  pendingImages: [],
+  pendingAttachments: [],
+  timer: null,
+  startTime: 0,
+  lastUpdate: 0
+};
+
+const DEBOUNCE_TIME = 2000;
+const MAX_WAIT_TIME = 60000; // 60s timeout
+
+function getConversationTitle() {
+  const titleEl = document.querySelector('.conversation-title');
+  // Fallback to document title if specific element missing, cleaning generic suffix if needed
+  if (titleEl) return titleEl.innerText.trim();
+  return document.title.replace("Gemini", "").trim() || "Conversation";
 }
 
 function domToMarkdown(node) {
-  if (!node) return "";
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent;
-  if (node.nodeType !== Node.ELEMENT_NODE) return "";
-
-  let md = "";
-  node.childNodes.forEach(child => md += domToMarkdown(child));
-
-  const tag = node.tagName.toLowerCase();
-
-  if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
-    const level = parseInt(tag[1]);
-    return `\n${'#'.repeat(level)} ${cleanText(node.textContent)}\n\n`;
-  }
-  if (tag === 'p') return `\n${md.trim()}\n\n`;
-
-  if (tag === 'pre') {
-    const code = node.querySelector('code');
-    let lang = "";
-    if (code) {
-      const classes = Array.from(code.classList || []);
-      const langClass = classes.find(c => c.startsWith('language-'));
-      if (langClass) lang = langClass.replace('language-', '');
-    }
-    return `\n\`\`\`${lang}\n${node.innerText.trim()}\n\`\`\`\n\n`;
-  }
-
-  if (tag === 'img') {
-    if (node.alt) return `[${node.alt}]`;
-    return "";
-  }
-
-  if (tag === 'ul') {
-    let listMd = "\n";
-    for (const child of node.children) {
-      if (child.tagName.toLowerCase() === 'li') listMd += `- ${child.innerText.trim()}\n`;
-    }
-    return listMd + "\n";
-  }
-  if (tag === 'ol') {
-    let listMd = "\n";
-    let idx = 1;
-    for (const child of node.children) {
-      if (child.tagName.toLowerCase() === 'li') listMd += `${idx++}. ${child.innerText.trim()}\n`;
-    }
-    return listMd + "\n";
-  }
-
-  if (tag === 'strong' || tag === 'b') return `**${md}**`;
-  if (tag === 'em' || tag === 'i') return `*${md}*`;
-
+  // Simple markdown converter
+  let md = node.innerText;
   return md;
 }
 
-function getConversationTitle() {
-  const titleEl = document.querySelector('h1[data-test-id="conversation-title"]') ||
-    document.querySelector('.conversation-title');
-  if (titleEl) return titleEl.innerText;
-  return document.title.replace(/ - (Gemini|Antigravity)$/g, '').trim();
-}
-
-function checkTurnCompletion() {
-  const now = Date.now();
-  if (currentTurn.status === 'RECORDING' && (now - currentTurn.lastUpdate >= DEBOUNCE_TIME)) {
-    finishTurn();
-  }
-}
-
-function findResponseAfter(promptNode) {
-  const candidates = Array.from(document.querySelectorAll('.model-response-text, .message-content, [data-message-author-role="model"], .model-response'));
-  for (const node of candidates) {
-    if (promptNode.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) {
-      return node;
+function findResponseAfter(userNode) {
+  // Gemini structure: user block is followed by a model block
+  // They are often siblings in a container
+  let next = userNode.nextElementSibling;
+  while (next) {
+    if (next.getAttribute('data-message-author-role') === 'model' || next.classList.contains('model-query-bubble')) {
+      return next;
     }
+    next = next.nextElementSibling;
   }
   return null;
 }
 
-function isLastPrompt(node) {
-  const allPrompts = document.querySelectorAll('.user-query-bubble-with-background');
-  if (allPrompts.length === 0) return false;
-  return allPrompts[allPrompts.length - 1] === node;
+// CACHE HARVESTER
+// Scans the DOM for any image that has a filename-looking string nearby
+function scanForFilenames() {
+  // 1. Find all images in the document (focusing on input area if possible, but global is safer)
+  const imgs = document.querySelectorAll('img');
+  const filenameRegex = /[a-zA-Z0-9_\-\(\)\s]+\.(png|jpg|jpeg|webp|gif|bmp|txt|csv|pdf|md|json|js|html|css)/i;
+
+  imgs.forEach(img => {
+    // Skip if already cached
+    if (filenameCache.has(img.src)) return;
+    if (img.width < 50) return; // Skip icons
+
+    // Look at parents for text
+    let p = img.parentElement;
+    for (let i = 0; i < 4 && p; i++) {
+      // Check attributes
+      const attrs = [p.getAttribute('aria-label'), p.getAttribute('title'), p.dataset.tooltip];
+      for (const a of attrs) {
+        if (a && filenameRegex.test(a)) {
+          // Extract just the filename part if possible, or take the whole string
+          const match = a.match(filenameRegex);
+          if (match) {
+            filenameCache.set(img.src, match[0]);
+            // console.log(`Artifact Sync: Cached [Attr] ${match[0]} for ${img.src}`);
+            return;
+          }
+        }
+      }
+
+      // Check text content (e.g. "7.png" text node next to image)
+      const text = p.innerText;
+      if (text && filenameRegex.test(text)) {
+        const match = text.match(filenameRegex);
+        if (match) {
+          filenameCache.set(img.src, match[0]);
+          // console.log(`Artifact Sync: Cached [Text] ${match[0]} for ${img.src}`);
+          return;
+        }
+      }
+      p = p.parentElement;
+    }
+  });
 }
 
-function finishTurn() {
-  if (currentTurn.status === 'SAVING') return;
+function checkTurnCompletion() {
   const now = Date.now();
-  currentTurn.status = 'SAVING';
+  if (currentTurn.status !== 'RECORDING') return;
 
-  if (!isLastPrompt(currentTurn.promptNode)) {
-    console.log("Artifact Sync: Abort - Not latest prompt.");
-    resetTurn();
-    return;
-  }
+  // 1. Re-validate Input (Prompt)
+  // Ensure the user message is "settled" (no typing indicator, processed)
+  const promptText = currentTurn.promptNode.innerText.trim();
 
-  // 1. Verify Prompt & Timestamp
-  currentTurn.pendingImages = [];
-  currentTurn.pendingAttachments = [];
-
-  const promptText = domToMarkdown(currentTurn.promptNode).trim();
-
-  if (!promptText || promptText.length === 0) {
-    resetTurn();
-    return;
-  }
-
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const safePrompt = promptText.replace(/[^a-z0-9]/gi, '_').substring(0, 40);
-
-  // --- VICINITY SCAN FOR ATTACHMENTS ---
-  // The uploaded images might be:
-  // 1. Inside the prompt bubble (Unlikely but possible)
-  // 2. In the Parent container (Likely wrapper)
-  // 3. In the Previous Sibling (User Block usually stacks items)
-
-  const candidates = new Set();
-
-  // Scans
-  const scanArray = (list) => {
-    list.forEach(img => candidates.add(img));
-  };
-
-  // A. Internal
-  scanArray(currentTurn.promptNode.querySelectorAll('img'));
-
-  // B. Parent (Go up 2 levels max)
-  let parent = currentTurn.promptNode.parentElement;
-  if (parent) {
-    scanArray(parent.querySelectorAll('img'));
-    if (parent.parentElement) {
-      scanArray(parent.parentElement.querySelectorAll('img'));
-    }
-  }
+  // 1.5 Scan for Attachments
+  // Look for images INSIDE the user prompt bubble
+  // Also look for images immediately preceding the user prompt (Gemini often stacks them)
+  const candidates = [];
+  const inBubble = currentTurn.promptNode.querySelectorAll('img');
+  inBubble.forEach(img => candidates.push(img));
 
   // C. Previous Sibling (Often the image block is just defined before the text block)
   let prev = currentTurn.promptNode.previousElementSibling;
   if (prev) {
-    scanArray(prev.querySelectorAll('img'));
+    const siblingImgs = prev.querySelectorAll('img');
+    siblingImgs.forEach(img => candidates.push(img));
   }
 
   const attachmentList = [];
   // Filter candidates
-  // We exclude avatars (usually small, circular, or specific class)
-  // But uploaded images can be thumbnails too. 
-  // Let's rely on size > 50px OR specific exclusion if needed.
-  // We also must ensure we aren't picking up the Gemini Logo or User Avatar.
-  // User Avatar often has class 'avatar' or is tiny.
-
   candidates.forEach(img => {
-    // Skip if tiny
+    // Skip if tiny or avatar
     if (img.width < 50 || img.height < 50) return;
-
-    // Skip if it looks like a profile picture (heuristic)
-    if (img.src.includes("googleusercontent.com") && img.src.includes("s64")) return; // s64 is often avatar size param
+    if (img.src.includes("googleusercontent.com") && img.src.includes("s64")) return;
     if (img.className.includes("avatar")) return;
 
     // Avoid duplicates
@@ -185,90 +124,18 @@ function finishTurn() {
     attachmentList.push(img);
   });
 
-  console.log(`Artifact Sync: Found ${attachmentList.length} potential attachments via Vicinity Scan.`);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const safePrompt = promptText.replace(/[^a-z0-9]/gi, '_').substring(0, 40);
+
+  console.log(`Artifact Sync: Details | Attachments: ${attachmentList.length}`);
 
   attachmentList.forEach((img, index) => {
-    // DEBUG VERSION: Log everything (v5)
-    console.log(`Artifact Sync: ------------------------------------------`);
-    console.log(`Artifact Sync: Analyzing Attachment ${index + 1}/${attachmentList.length}`);
-    console.log("Artifact Sync: Image Src:", img.src);
-    console.log("Artifact Sync: Image Alt:", img.alt);
+    // RESOLVE FILENAME: Cache > Regex > Fallback
+    let bestName = filenameCache.get(img.src);
 
-    let bestName = null;
-    const candidates = [];
-
-    const addCandidate = (source, val) => {
-      if (val && typeof val === 'string' && val.trim().length > 0) {
-        const v = val.trim();
-        console.log(`Artifact Sync: Candidate [${source}]: "${v}"`);
-        candidates.push({ source: source, value: v });
-      }
-    };
-
-    // 1. Attributes (Image)
-    addCandidate("img.title", img.getAttribute('title'));
-    addCandidate("img.aria-label", img.getAttribute('aria-label'));
-    addCandidate("img.alt", img.alt);
-    addCandidate("img.data-tooltip", img.getAttribute('data-tooltip'));
-
-    // 2. Vicinity Scan (Parents)
-    let p = img.parentElement;
-    for (let i = 0; i < 4 && p; i++) {
-      addCandidate(`p${i}.title`, p.getAttribute('title'));
-      addCandidate(`p${i}.aria`, p.getAttribute('aria-label'));
-      addCandidate(`p${i}.tooltip`, p.getAttribute('data-tooltip'));
-
-      // TEXT CONTENT SCAN
-      const textParts = p.innerText.split(/[\n\t]+/);
-      for (const part of textParts) {
-        addCandidate(`p${i}.text`, part);
-      }
-
-      // Button Search
-      const buttons = p.querySelectorAll('button, [role="button"]');
-      buttons.forEach(b => {
-        addCandidate(`p${i}.btn_label`, b.getAttribute('aria-label'));
-      });
-
-      p = p.parentElement;
-    }
-
-    const badNames = ["uploaded image preview", "image", "attachment", "preview", "thumbnail", "remove"];
-    // Regex for typical filenames
-    const filenameRegex = /[a-zA-Z0-9_\-\(\)\s]+\.(png|jpg|jpeg|webp|gif|bmp|txt|csv|pdf|md|json|js|html|css)/i;
-
-    // 3. Selection Logic
-    for (const c of candidates) {
-      let s = c.value;
-      if (s.toLowerCase().startsWith("remove ")) s = s.substring(7).trim();
-
-      if (badNames.some(b => s.toLowerCase() === b)) continue;
-      if (badNames.some(b => s.toLowerCase().includes(b) && !s.includes('.'))) continue;
-
-      // Check Regex
-      const match = s.match(filenameRegex);
-      if (match) {
-        if (s.length < 50) {
-          bestName = s;
-          console.log(`Artifact Sync: >>> MATCHED "${s}" from source: ${c.source}`);
-        } else {
-          bestName = match[0];
-          console.log(`Artifact Sync: >>> MATCHED REGEX "${match[0]}" in "${s}" from source: ${c.source}`);
-        }
-        break;
-      }
-    }
-
-    // 4. Fallback
     if (!bestName) {
-      for (const c of candidates) {
-        let s = c.value;
-        if (badNames.some(b => s.toLowerCase().includes(b))) continue;
-        if (s.length > 50) continue;
-        bestName = s;
-        console.log(`Artifact Sync: >>> FALLBACK "${s}" from source: ${c.source}`);
-        break;
-      }
+      // Try one last check of the history bubble itself (rarely works for Gemini, but good to have)
+      bestName = img.alt || "attachment";
     }
 
     let rawName = bestName || "attachment";
@@ -278,9 +145,7 @@ function finishTurn() {
 
     if (safeName.length < 3) safeName = "attachment";
 
-    let suffix = "";
-    if (attachmentList.length > 1) suffix = "_" + (index + 1);
-
+    let suffix = (attachmentList.length > 1) ? "_" + (index + 1) : "";
     const filename = `${safePrompt}_${timestamp}_${safeName}${suffix}.png`;
 
     currentTurn.pendingAttachments.push({
@@ -289,7 +154,6 @@ function finishTurn() {
       alt: rawName
     });
   });
-
 
   // 2. Find Response
   const responseNode = findResponseAfter(currentTurn.promptNode);
@@ -348,8 +212,6 @@ function finishTurn() {
     return;
   }
 
-  console.log(`Artifact Sync: Payload | Attachments: ${currentTurn.pendingAttachments.length} | Artifacts: ${currentTurn.pendingImages.length}`);
-
   const title = getConversationTitle();
   const payload = {
     title: title,
@@ -398,6 +260,10 @@ function resetTurn() {
 function handleMutation(mutations) {
   const now = Date.now();
   let interactionDetected = false;
+
+  // RUN CACHE HARVESTER ON DOM CHANGE
+  // This ensures we catch the filename while it is still in the Input Preview!
+  scanForFilenames();
 
   for (const mutation of mutations) {
     if (mutation.type === 'childList') {
