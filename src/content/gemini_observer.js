@@ -13,7 +13,8 @@ const currentTurn = {
     startTime: 0,
     lastUpdate: 0,
     lastLength: 0,
-    emptyChecks: 0
+    emptyChecks: 0,
+    failedNodes: new Set()
 };
 
 const DEBOUNCE_TIME = 2000;
@@ -143,6 +144,13 @@ function findResponseFallback(userNode) {
     let next = userNode.nextElementSibling;
     let attempts = 0;
     while (next && attempts < 50) {
+        // Skip blacklisted nodes
+        if (currentTurn.failedNodes.has(next)) {
+            next = next.nextElementSibling;
+            attempts++;
+            continue;
+        }
+
         console.log("Artifact Sync: Scanning sibling:", next.tagName, next.className);
 
         // Track Pending/Model tags as backups
@@ -175,6 +183,13 @@ function findResponseFallback(userNode) {
         let pNext = parent.nextElementSibling;
         let pAttempts = 0;
         while (pNext && pAttempts < 50) {
+            // Skip blacklisted nodes
+            if (currentTurn.failedNodes.has(pNext)) {
+                pNext = pNext.nextElementSibling;
+                pAttempts++;
+                continue;
+            }
+
             console.log(`Artifact Sync: Scanning uncle (L${i}):`, pNext.tagName, pNext.className);
 
             // Track Pending/Model tags as backups
@@ -341,7 +356,8 @@ async function checkTurnCompletion() {
         console.log(`Artifact Sync: Response incomplete (Len: ${responseText.length}, Imgs: ${responseImages.length}). Check ${currentTurn.emptyChecks}/5.`);
 
         if (currentTurn.emptyChecks > 5) {
-            console.log("Artifact Sync: Response node text persistently empty. Abandoning and rescanning...");
+            console.log("Artifact Sync: Response node text persistently empty. Blacklisting and rescanning...");
+            currentTurn.failedNodes.add(currentTurn.responseNode);
             currentTurn.responseNode = null;
             currentTurn.emptyChecks = 0;
             currentTurn.timer = setTimeout(checkTurnCompletion, 200);
