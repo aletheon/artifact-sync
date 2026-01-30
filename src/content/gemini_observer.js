@@ -196,10 +196,19 @@ function findResponseFallback(userNode) {
 
         // Track Pending/Model tags as backups
         if (next.tagName === 'PENDING-RESPONSE' || next.tagName === 'MODEL-RESPONSE') {
+            // CRITICAL FIX: If it is actually populated now, TAKE IT!
+            const textLen = next.innerText ? next.innerText.trim().length : 0;
+            const hasImgs = next.querySelector('img');
+
+            if (textLen > 20 || hasImgs) {
+                console.log(`Artifact Sync: PENDING-RESPONSE became valid (Len: ${textLen}). Capturing!`, next);
+                return next;
+            }
+
             if (currentTurn.pendingFailures < 3) {
                 if (!next.getAttribute('data-as-failed')) pendingCandidate = next;
             } else {
-                console.log("Artifact Sync: Ignoring PENDING-RESPONSE due to repeated failures.");
+                console.log("Artifact Sync: Ignoring empty PENDING-RESPONSE due to repeated failures.");
             }
         }
 
@@ -239,11 +248,19 @@ function findResponseFallback(userNode) {
                 pAttempts++;
                 continue;
             }
-
             console.log(`Artifact Sync: Scanning uncle (L${i}):`, pNext.tagName, pNext.className);
 
             // Track Pending/Model tags as backups
             if (pNext.tagName === 'PENDING-RESPONSE' || pNext.tagName === 'MODEL-RESPONSE') {
+                // CRITICAL FIX: If it is actually populated now, TAKE IT!
+                const textLen = pNext.innerText ? pNext.innerText.trim().length : 0;
+                const hasImgs = pNext.querySelector('img');
+
+                if (textLen > 20 || hasImgs) {
+                    console.log(`Artifact Sync: PENDING-RESPONSE (Uncle) became valid (Len: ${textLen}). Capturing!`, pNext);
+                    return pNext;
+                }
+
                 if (currentTurn.pendingFailures < 3) {
                     if (!pNext.getAttribute('data-as-failed')) pendingCandidate = pNext;
                 }
