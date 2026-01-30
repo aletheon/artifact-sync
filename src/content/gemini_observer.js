@@ -98,6 +98,10 @@ function findResponseFallback(userNode) {
             return next;
         }
         // Deep check for markdown if the tag itself isn't obvious
+        if (next.querySelector('response-container')) {
+            console.log("Artifact Sync: Found response via Sibling->Container Scan!", next);
+            return next.querySelector('response-container');
+        }
         if (next.querySelector('.markdown')) {
             console.log("Artifact Sync: Found response via Sibling->Markdown Scan!", next);
             return next;
@@ -135,6 +139,11 @@ function findResponseFallback(userNode) {
                 if (roleModel) {
                     console.log("Artifact Sync: Found response via Uncle->Role Scan!", roleModel);
                     return roleModel;
+                }
+                const container = pNext.querySelector('response-container');
+                if (container) {
+                    console.log("Artifact Sync: Found response via Uncle->Container Scan!", container);
+                    return container;
                 }
                 // Generic Markdown Check (Strong Fallback)
                 const markdown = pNext.querySelector('.markdown');
