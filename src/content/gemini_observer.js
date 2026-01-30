@@ -246,20 +246,27 @@ async function checkTurnCompletion() {
     currentTurn.responseNode = responseNode;
 
     // 3. Extract Content
-    let contentNode = responseNode;
-    const markdownNode = responseNode.querySelector('.markdown');
-    if (markdownNode) {
-        contentNode = markdownNode;
+    // We prefer the full container text to capture tables/lists that might differ from just the first .markdown block
+    let responseText = domToMarkdown(responseNode).trim();
+
+    // Debug: Check if .markdown was giving us less
+    const mdNode = responseNode.querySelector('.markdown');
+    if (mdNode) {
+        // console.log(`Artifact Sync: Container Len: ${responseText.length}, First Markdown Len: ${mdNode.innerText.length}`);
+    } else {
+        // console.log(`Artifact Sync: Container Len: ${responseText.length}, No Markdown class found.`);
     }
 
-    // Fallback: if no markdown class, look for specific message content containers
-    if (!markdownNode) {
-        const messageContent = responseNode.querySelector('.message-content');
-        if (messageContent) contentNode = messageContent;
+    // Fallback: If container text is empty (Shadow DOM?), try aggregating specific children
+    if (!responseText) {
+        console.log("Artifact Sync: Container text empty, trying aggregation fallback...");
+        const paragraphs = responseNode.querySelectorAll('p, h1, h2, h3, li, table, .markdown');
+        if (paragraphs.length > 0) {
+            responseText = Array.from(paragraphs).map(p => p.innerText).join('\n');
+        }
     }
 
-    const responseText = domToMarkdown(contentNode).trim();
-    console.log(`Artifact Sync: Extracted text length: ${responseText.length} from tag: ${contentNode.tagName}.${contentNode.className}`);
+    console.log(`Artifact Sync: Final Extracted text length: ${responseText.length}`);
 
 
     // 4. Extract Artifacts (Images in Response)
