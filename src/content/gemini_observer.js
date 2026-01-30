@@ -77,9 +77,15 @@ const isModel = (n) => {
 function findResponseFallback(userNode) {
     // 1. Sibling Scan (Specific)
     let next = userNode.nextElementSibling;
-    while (next) {
-        if (isModel(next)) return next;
+    let attempts = 0;
+    while (next && attempts < 10) {
+        // console.log("Artifact Sync: Scanning sibling:", next.tagName, next.className);
+        if (isModel(next)) {
+            console.log("Artifact Sync: Found response via Sibling Scan!", next);
+            return next;
+        }
         next = next.nextElementSibling;
+        attempts++;
     }
 
     // 2. Row/Parent Scan (Specific)
@@ -87,9 +93,23 @@ function findResponseFallback(userNode) {
     for (let i = 0; i < 4 && parent && parent.tagName !== 'MAIN'; i++) {
         let pNext = parent.nextElementSibling;
         while (pNext) {
-            if (isModel(pNext)) return pNext;
-            if (pNext.querySelector && pNext.querySelector('.model-query-bubble')) return pNext.querySelector('.model-query-bubble');
-            if (pNext.querySelector && pNext.querySelector('[data-message-author-role="model"]')) return pNext.querySelector('[data-message-author-role="model"]');
+            // console.log("Artifact Sync: Scanning uncle:", pNext.tagName, pNext.className);
+            if (isModel(pNext)) {
+                console.log("Artifact Sync: Found response via Uncle Scan!", pNext);
+                return pNext;
+            }
+            if (pNext.querySelector) {
+                const bubble = pNext.querySelector('.model-query-bubble');
+                if (bubble) {
+                    console.log("Artifact Sync: Found response via Uncle->Child Scan!", bubble);
+                    return bubble;
+                }
+                const roleModel = pNext.querySelector('[data-message-author-role="model"]');
+                if (roleModel) {
+                    console.log("Artifact Sync: Found response via Uncle->Role Scan!", roleModel);
+                    return roleModel;
+                }
+            }
             pNext = pNext.nextElementSibling;
         }
         parent = parent.parentElement;
