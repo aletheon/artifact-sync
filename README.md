@@ -36,7 +36,26 @@ Artifact Sync keeps your data structured and easy to find. Whether using Google 
     *   **PDF Mode**: Stored in the `pdfs/` subfolder. It follows the **exact same sequence** as the Markdown file (Prompt → Attachments → Response → Artifacts), ensuring you have a readable, linear record of the conversation.
 
 
-*   **Browser Dependency**: The extension relies on the DOM structure of the AI provider's web interface. If Gemini or ChatGPT significantly changes their HTML layout, the scraper may break until updated.
+## 🏷️ File Naming Conventions
+
+To make your archives easy to search and sort, files are named using a consistent convention:
+
+`{SafePrompt}_{Timestamp}{Suffix}.{Extension}`
+
+*   **SafePrompt**: The first 40 characters of your prompt, with non-alphanumeric characters replaced by underscores (e.g., `Make_a_red_button_component`).
+*   **Timestamp**: The exact date and time in ISO format (e.g., `2024-05-20T10-30-05`).
+*   **Suffix**:
+    *   **Main Log**: No suffix (e.g., `.md` or `.pdf`).
+    *   **Artifacts**: `_1`, `_2`, etc. (if multiple images are generated in one turn).
+    *   **Attachments**: `_attachment_1`, etc.
+
+**Example Set:**
+*   `Make_a_nav_bar_2024-05-20T10-30-05.md` (Conversation Log)
+*   `Make_a_nav_bar_2024-05-20T10-30-05.png` (The generated UI screenshot)
+*   `Make_a_nav_bar_2024-05-20T10-30-05_attachment.png` (Image you uploaded)
+
+This naming strategy ensures that when you sort by name, all related files for a specific turn stay grouped together.
+
 *   **Local File Organization**: When using the "Local" storage method with the default "Downloads" strategy, the extension is limited by Chrome's download API. It creates subfolders within your default Downloads directory but cannot write outside of it.
     > **💡 Tip (Workaround):** You can change your computer's default Download location in Chrome Settings (`chrome://settings/downloads`) to any specific drive or volume you want. Artifact Sync will then automatically save files to that new location.
 *   **PDF Generation**: PDF generation is done client-side and may struggle with extremely long conversations or complex layouts.
