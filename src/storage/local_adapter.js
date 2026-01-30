@@ -65,10 +65,20 @@ export class LocalAdapter {
         return md;
     }
 
-    download(content, filename, mimeType) {
-        const blob = new Blob([content], { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        return this.downloadUrl(url, filename);
+    async download(content, filename, mimeType) {
+        // Service Workers cannot use URL.createObjectURL.
+        // We must use Data URLs (Base64).
+        const base64 = await this.blobToDataURL(new Blob([content], { type: mimeType }));
+        return this.downloadUrl(base64, filename);
+    }
+
+    blobToDataURL(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
     }
 
     downloadUrl(url, filename) {
