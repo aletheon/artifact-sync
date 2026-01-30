@@ -44,7 +44,7 @@ function findResponseAfter(userNode) {
     return false;
   };
 
-  // 1. Sibling Scan
+  // 1. Sibling Scan (fastest)
   let next = userNode.nextElementSibling;
   while (next) {
     if (isModel(next)) return next;
@@ -53,16 +53,29 @@ function findResponseAfter(userNode) {
 
   // 2. Parent-Sibling Scan (Row Level)
   let parent = userNode.parentElement;
-  // Don't go too high (e.g. body)
-  for (let i = 0; i < 3 && parent && parent.tagName !== 'MAIN'; i++) {
+  for (let i = 0; i < 4 && parent && parent.tagName !== 'MAIN'; i++) {
     let pNext = parent.nextElementSibling;
     while (pNext) {
       if (isModel(pNext)) return pNext;
       // Also check inside the sibling
       if (pNext.querySelector && pNext.querySelector('.model-query-bubble')) return pNext.querySelector('.model-query-bubble');
+      if (pNext.querySelector && pNext.querySelector('[data-message-author-role="model"]')) return pNext.querySelector('[data-message-author-role="model"]');
       pNext = pNext.nextElementSibling;
     }
     parent = parent.parentElement;
+  }
+
+  // 3. LAST RESORT: Global Document Scan
+  // If we still haven't found it, look at ALL model messages in the document.
+  // Find the first one that appears AFTER our prompt node.
+  const allModelNodes = document.querySelectorAll('[data-message-author-role="model"], .model-query-bubble');
+  for (const modelNode of allModelNodes) {
+    // Bitmask 4 means "modelNode follows userNode"
+    if (userNode.compareDocumentPosition(modelNode) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      // Verify it's not too far away? (Optional, but for now we trust it)
+      console.log("Artifact Sync: Found response via Global Scan (Last Resort).");
+      return modelNode;
+    }
   }
 
   return null;
