@@ -11,7 +11,8 @@ const currentTurn = {
     pendingAttachments: [],
     timer: null,
     startTime: 0,
-    lastUpdate: 0
+    lastUpdate: 0,
+    lastLength: 0
 };
 
 const DEBOUNCE_TIME = 2000;
@@ -55,12 +56,13 @@ function getDeepText(node) {
 
     // Block spacing (Only for real semantic breaks)
     const tag = node.tagName;
-    if (tag === 'P' || tag === 'BR' || tag === 'LI' || tag === 'TR') {
+    if (tag === 'P' || tag === 'DIV' || tag === 'BR' || tag === 'LI' || tag === 'TR') {
         text += "\n";
     }
 
     return text;
 }
+
 
 function cleanMarkdown(text) {
     if (!text) return "";
@@ -339,6 +341,16 @@ async function checkTurnCompletion() {
         console.log(`Artifact Sync: Response incomplete (Len: ${responseText.length}, Imgs: ${responseImages.length}). Waiting...`);
         currentTurn.lastUpdate = now;
         currentTurn.timer = setTimeout(checkTurnCompletion, 2000);
+        return;
+    }
+
+    // 6b. STABILITY CHECK: Is it still streaming?
+    if (responseText.length !== currentTurn.lastLength) {
+        console.log(`Artifact Sync: Response growing (${currentTurn.lastLength} -> ${responseText.length}). Waiting for stability...`);
+        currentTurn.lastLength = responseText.length;
+        currentTurn.lastUpdate = now;
+        if (currentTurn.timer) clearTimeout(currentTurn.timer);
+        currentTurn.timer = setTimeout(checkTurnCompletion, 2000); // Wait 2s for more text
         return;
     }
 
