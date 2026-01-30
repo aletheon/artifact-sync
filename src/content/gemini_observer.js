@@ -25,6 +25,43 @@ function getConversationTitle() {
     return document.title.replace("Gemini", "").trim() || "Conversation";
 }
 
+function getDeepText(node) {
+    if (!node) return "";
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue;
+    if (node.nodeType !== Node.ELEMENT_NODE) return "";
+
+    // Ignore hidden elements
+    if (node.style && (node.style.display === 'none' || node.style.visibility === 'hidden')) return "";
+
+    let text = "";
+
+    // 1. Shadow Root
+    if (node.shadowRoot) {
+        text += getDeepText(node.shadowRoot);
+    }
+
+    // 2. Slots
+    if (node.tagName === 'SLOT') {
+        const assigned = node.assignedNodes();
+        for (const n of assigned) text += getDeepText(n);
+    }
+
+    // 3. Children
+    if (node.childNodes && node.childNodes.length > 0) {
+        for (const child of node.childNodes) {
+            text += getDeepText(child);
+        }
+    }
+
+    // Block spacing
+    const tag = node.tagName;
+    if (tag === 'P' || tag === 'DIV' || tag === 'BR' || tag === 'LI' || tag === 'TR' || tag === 'ANALYSIS-SECTION') {
+        text += "\n";
+    }
+
+    return text;
+}
+
 function domToMarkdown(node) {
     return node.innerText || "";
 }
@@ -246,27 +283,26 @@ async function checkTurnCompletion() {
     currentTurn.responseNode = responseNode;
 
     // 3. Extract Content
-    // We prefer the full container text to capture tables/lists that might differ from just the first .markdown block
-    let responseText = responseNode.innerText.trim();
+    // Use Shadow-piercing text extraction
+    let responseText = getDeepText(responseNode).trim();
 
-    // Debug: Check if .markdown was giving us less
-    const mdNode = responseNode.querySelector('.markdown');
-    if (mdNode) {
-        // console.log(`Artifact Sync: Container Len: ${responseText.length}, First Markdown Len: ${mdNode.innerText.length}`);
-    } else {
-        // console.log(`Artifact Sync: Container Len: ${responseText.length}, No Markdown class found.`);
+    // Fallback: If getDeepText fails (e.g. edge cases), try innerText
+    if (!responseText) responseText = responseNode.innerText.trim();
+
+    console.log(`Artifact Sync: Extracted text length: ${responseText.length}`);
+
+    // HEURISTIC: Tool Use "Analysis" Loading State
+    // If the text is just "Show code Analysis" or "Analysis", it's likely the tool output hasn't rendered yet.
+    // Or it is hidden behind a toggle that we need to account for.
+    // "5 * 5 = 25" usually appears below "Analysis".
+
+    const isToolStub = responseText.match(/^(Show code\s*)?Analysis\s*$/i);
+    if (isToolStub) {
+        console.log("Artifact Sync: Detected Tool Stub ('Analysis'). Waiting for full content...");
+        currentTurn.lastUpdate = now;
+        currentTurn.timer = setTimeout(checkTurnCompletion, 2000);
+        return;
     }
-
-    // Fallback: If container text is empty (Shadow DOM?), try aggregating specific children
-    if (!responseText) {
-        console.log("Artifact Sync: Container text empty, trying aggregation fallback...");
-        const paragraphs = responseNode.querySelectorAll('p, h1, h2, h3, li, table, .markdown');
-        if (paragraphs.length > 0) {
-            responseText = Array.from(paragraphs).map(p => p.innerText).join('\n');
-        }
-    }
-
-    console.log(`Artifact Sync: Final Extracted text length: ${responseText.length}`);
 
 
     // 4. Extract Artifacts (Images in Response)
