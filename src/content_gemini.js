@@ -188,44 +188,61 @@ function finishTurn() {
   console.log(`Artifact Sync: Found ${attachmentList.length} potential attachments via Vicinity Scan.`);
 
   attachmentList.forEach((img, index) => {
-    // STRATEGY: Find the best filename by checking the image and its parents.
-    // Gemini often puts the "7.png" title on a wrapper div, not the img itself.
-    // The img alt is often "Uploaded image preview".
+    // STRATEGY (v3): Deep Search for Filename
+    // The user sees "7.png" on hover. This implies a tooltip.
+    // We check: title, aria-label, data-tooltip, dataset.tooltip
+    // We check: img, and up to 5 parents.
 
     let bestName = null;
-    const candidates = [
-      img.getAttribute('title'),
-      img.getAttribute('aria-label'),
-      img.alt
-    ];
+    const candidates = [];
 
-    // Check parents (up to 3 levels up)
+    const addCandidate = (val) => {
+      if (val && typeof val === 'string' && val.trim().length > 0) candidates.push(val);
+    };
+
+    // 1. Check Image Attributes
+    addCandidate(img.getAttribute('title'));
+    addCandidate(img.getAttribute('aria-label'));
+    addCandidate(img.getAttribute('data-tooltip'));
+    addCandidate(img.alt);
+
+    // 2. Check Parents (up to 5 levels)
+    // Sometimes the tooltip is on a wrapper far up.
     let p = img.parentElement;
-    for (let i = 0; i < 3 && p; i++) {
-      candidates.push(p.getAttribute('title'));
-      candidates.push(p.getAttribute('aria-label'));
+    for (let i = 0; i < 5 && p; i++) {
+      addCandidate(p.getAttribute('title'));
+      addCandidate(p.getAttribute('aria-label'));
+      addCandidate(p.getAttribute('data-tooltip'));
+
+      // Also look for specific classes that might hold the filename?
+      // e.g. .file-name
+      const nameEl = p.querySelector('.file-name, .name, [class*="filename"]');
+      if (nameEl) addCandidate(nameEl.innerText);
+
       p = p.parentElement;
     }
 
-    const badNames = ["uploaded image preview", "image", "attachment", "preview"];
+    console.log("Artifact Sync: Attachment Candidates for", img.src.substring(0, 30) + "...", candidates);
 
-    // 1. Look for explicit filename format (ends in .png, .jpg, etc)
+    const badNames = ["uploaded image preview", "image", "attachment", "preview", "thumbnail"];
+
+    // 3. Filter & Pick
+    // Priority: Has Extension > Not Bad > Fallback
     for (const c of candidates) {
-      if (!c) continue;
       const s = c.trim();
+      // Skip bad names immediately
       if (badNames.some(b => s.toLowerCase().includes(b))) continue;
 
-      // Check for extension
+      // Check for extension (strong signal)
       if (/\.[a-zA-Z0-9]{3,4}$/.test(s)) {
         bestName = s;
-        break;
+        break; // Found it!
       }
     }
 
-    // 2. If no extension found, take first non-bad candidate
+    // 4. Fallback: If no extension found, take the first reasonable string
     if (!bestName) {
       for (const c of candidates) {
-        if (!c) continue;
         const s = c.trim();
         if (badNames.some(b => s.toLowerCase().includes(b))) continue;
         bestName = s;
@@ -255,7 +272,6 @@ function finishTurn() {
 
 
   // 2. Find Response
-  const responseNode = findResponseAfter(currentTurn.promptNode);
 
   if (!responseNode) {
     if (now - currentTurn.startTime > MAX_WAIT_TIME) {
