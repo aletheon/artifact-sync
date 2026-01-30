@@ -69,7 +69,7 @@ function saveTurn(userNode, responseNode) {
 
     // EXTRACT ATTACHMENTS (User)
     const attachments = extractAttachments(userNode, safePrompt, timestamp);
-    
+
     // EXTRACT ARTIFACTS (Assistant)
     const artifacts = extractImages(responseNode, safePrompt, timestamp);
 
@@ -107,12 +107,17 @@ function extractAttachments(node, safePrompt, timestamp) {
     const imgs = node.querySelectorAll('img');
     const list = [];
     imgs.forEach((img, idx) => {
-         // Filter out avatars
+        // Filter out avatars
         if (img.width < 50 || img.height < 50) return;
         if (img.alt === "User") return;
 
+        const rawName = img.alt || "attachment";
+        let safeName = rawName.replace(/[^a-z0-9\.\-_]/gi, '_');
+
+        if (safeName.length < 3) safeName = "attachment";
+
         const suffix = list.length > 0 ? `_${list.length + 1}` : "";
-        const filename = `${safePrompt}_${timestamp}_attachment${suffix}.png`;
+        const filename = `${safePrompt}_${timestamp}_${safeName}${suffix}.png`;
         list.push({ src: img.src, filename: filename, alt: img.alt || "attachment" });
     });
     return list;
@@ -122,7 +127,7 @@ function extractImages(node, safePrompt, timestamp) {
     const imgs = node.querySelectorAll('img');
     const list = [];
     imgs.forEach((img, idx) => {
-         // Filter out tiny icons
+        // Filter out tiny icons
         if (img.width < 100 || img.height < 100) return;
 
         const suffix = list.length > 0 ? `_${list.length + 1}` : "";

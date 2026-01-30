@@ -188,10 +188,21 @@ function finishTurn() {
   console.log(`Artifact Sync: Found ${attachmentList.length} potential attachments via Vicinity Scan.`);
 
   attachmentList.forEach((img, index) => {
+    // PREFER ALT TEXT AS FILENAME
+    let rawName = img.alt || "attachment";
+    // Sanitize: Remove extension if doubled, remove bad chars
+    let safeName = rawName.replace(/[^a-z0-9\.\-_]/gi, '_');
+
+    // Ensure we don't end up with just an extension or empty
+    if (safeName.length < 3) safeName = "attachment";
+
+    // Detect if suffix is needed for duplicates (though duplicates are filtered above, 
+    // multiple files might have same name if user uploads same file twice?)
+    // Actually, simple counter suffix is safer if we have multiple attachments
     let suffix = "";
     if (attachmentList.length > 1) suffix = "_" + (index + 1);
 
-    const filename = `${safePrompt}_${timestamp}_attachment${suffix}.png`;
+    const filename = `${safePrompt}_${timestamp}_${safeName}${suffix}.png`;
 
     currentTurn.pendingAttachments.push({
       filename: filename,

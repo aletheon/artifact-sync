@@ -47,12 +47,12 @@ To make your archives easy to search and sort, files are named using a consisten
 *   **Suffix**:
     *   **Main Log**: No suffix (e.g., `.md` or `.pdf`).
     *   **Artifacts**: `_1`, `_2`, etc. (if multiple images are generated in one turn).
-    *   **Attachments**: `_attachment_1`, etc.
+    *   **Attachments**: `_{original_filename_sanitized}`. (e.g., `_my_screenshot_png.png`).
 
 **Example Set:**
 *   `Make_a_nav_bar_2024-05-20T10-30-05.md` (Conversation Log)
 *   `Make_a_nav_bar_2024-05-20T10-30-05.png` (The generated UI screenshot)
-*   `Make_a_nav_bar_2024-05-20T10-30-05_attachment.png` (Image you uploaded)
+*   `Make_a_nav_bar_2024-05-20T10-30-05_my_screenshot_png.png` (Image you uploaded)
 
 This naming strategy ensures that when you sort by name, all related files for a specific turn stay grouped together.
 
