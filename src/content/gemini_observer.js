@@ -53,13 +53,30 @@ function getDeepText(node) {
         }
     }
 
-    // Block spacing
+    // Block spacing (Only for real semantic breaks)
     const tag = node.tagName;
-    if (tag === 'P' || tag === 'DIV' || tag === 'BR' || tag === 'LI' || tag === 'TR' || tag === 'ANALYSIS-SECTION') {
+    if (tag === 'P' || tag === 'BR' || tag === 'LI' || tag === 'TR') {
         text += "\n";
     }
 
     return text;
+}
+
+function cleanMarkdown(text) {
+    if (!text) return "";
+
+    // 1. Remove UI artifacts (Show code, Analysis headers, etc)
+    let lines = text.split('\n');
+    lines = lines.filter(line => {
+        const t = line.trim();
+        if (t === 'Show code') return false;
+        if (t === 'Analysis') return false; // often duplicated
+        if (t === 'Sources') return false;
+        return true;
+    });
+
+    // 2. Re-join and Collapse excessive newlines
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function domToMarkdown(node) {
@@ -288,6 +305,9 @@ async function checkTurnCompletion() {
 
     // Fallback: If getDeepText fails (e.g. edge cases), try innerText
     if (!responseText) responseText = responseNode.innerText.trim();
+
+    // CLEANUP: Normalize whitespace and remove UI noise
+    responseText = cleanMarkdown(responseText);
 
     console.log(`Artifact Sync: Extracted text length: ${responseText.length}`);
 
