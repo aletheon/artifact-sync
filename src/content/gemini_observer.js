@@ -65,6 +65,39 @@ function getDeepText(node) {
     return text;
 }
 
+function getDeepImages(node) {
+    const images = [];
+    if (!node) return images;
+
+    // 1. Direct Image
+    if (node.tagName === 'IMG') {
+        images.push(node);
+    }
+
+    // 2. Shadow Root
+    if (node.shadowRoot) {
+        images.push(...getDeepImages(node.shadowRoot));
+    }
+
+    // 3. Slots
+    if (node.tagName === 'SLOT') {
+        const assigned = node.assignedNodes();
+        for (const n of assigned) {
+            if (n.nodeType === Node.ELEMENT_NODE) {
+                images.push(...getDeepImages(n));
+            }
+        }
+    }
+
+    // 4. Children
+    if (node.children && node.children.length > 0) {
+        for (const child of node.children) {
+            images.push(...getDeepImages(child));
+        }
+    }
+
+    return images;
+}
 
 function cleanMarkdown(text) {
     if (!text) return "";
@@ -329,12 +362,14 @@ async function checkTurnCompletion() {
 
     // HEURISTIC: Tool Use "Analysis" Loading State
     // If the text is just "Show code Analysis" or "Analysis", it's likely the tool output hasn't rendered yet.
-    // Or it is hidden behind a toggle that we need to account for.
-    // "5 * 5 = 25" usually appears below "Analysis".
+    // Also catch "Loading" states (e.g. "Loading Nano Banana" for images).
 
-    const isToolStub = responseText.match(/^(Show code\s*)?Analysis\s*$/i);
+    const isToolStub = responseText.match(/^(Show code\s*)?Analysis\s*$/i) ||
+        responseText.match(/Loading/i) ||
+        responseText.includes("Nano Banana"); // Specific catch based on logs
+
     if (isToolStub) {
-        console.log("Artifact Sync: Detected Tool Stub ('Analysis'). Waiting for full content...");
+        console.log(`Artifact Sync: Detected Tool Stub/Loading State ('${responseText.substring(0, 20)}...'). Waiting for full content...`);
         currentTurn.lastUpdate = now;
         currentTurn.timer = setTimeout(checkTurnCompletion, 2000);
         return;
@@ -342,8 +377,10 @@ async function checkTurnCompletion() {
 
 
     // 4. Extract Artifacts (Images in Response)
+    // Use Shadow-piercing image extraction
+    const foundImages = getDeepImages(responseNode);
     const responseImages = [];
-    responseNode.querySelectorAll('img').forEach(img => {
+    foundImages.forEach(img => {
         if (img.width > 100 && img.height > 100) responseImages.push(img);
     });
 
