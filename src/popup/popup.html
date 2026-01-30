@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Artifact Sync</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 15px;
+      width: 300px;
+      font-size: 14px;
+      margin: 0;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 15px;
+      cursor: pointer;
+    }
+
+    select,
+    input[type="text"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 5px;
+      margin-top: 5px;
+    }
+
+    h2 {
+      color: #333;
+      margin-top: 0;
+      font-size: 18px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 10px;
+    }
+
+    .status {
+      margin-top: 10px;
+      color: green;
+      display: none;
+      text-align: center;
+    }
+
+    button {
+      width: 100%;
+    }
+
+    small {
+      line-height: 1.4;
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>Artifact Sync Settings</h2>
+
+  <label>
+    <strong>Storage Location:</strong><br>
+    <select id="storageMode">
+      <option value="LOCAL">Local (Downloads Folder)</option>
+      <option value="DRIVE">Google Drive</option>
+    </select>
+  </label>
+
+  <label>
+    <strong>Root Folder Name:</strong><br>
+    <input type="text" id="rootFolderName" placeholder="Artifact Sync" value="Artifact Sync">
+    <small id="folderPreview" style="color: #666;">Files saved to Downloads/Artifact Sync</small>
+  </label>
+
+  <label style="margin-top: 15px; display: flex; align-items: center;">
+    <input type="checkbox" id="pdfEnabled">
+    <strong style="margin-left: 10px;">Enable PDF Output</strong>
+  </label>
+
+  <button id="save"
+    style="padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px;">Save
+    Settings</button>
+  <div id="status" class="status">Settings Saved!</div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>
