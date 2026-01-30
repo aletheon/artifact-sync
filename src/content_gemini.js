@@ -188,86 +188,85 @@ function finishTurn() {
   console.log(`Artifact Sync: Found ${attachmentList.length} potential attachments via Vicinity Scan.`);
 
   attachmentList.forEach((img, index) => {
-    // STRATEGY (v4): Visual Text & Regex Scan
-    // The user sees the text "7.png" on the screen. 
-    // We shouldn't rely on specific class names (which change) or attributes (which might be missing).
-    // We will grab the full text of the wrapper and look for the filename pattern.
+    // DEBUG VERSION: Log everything (v5)
+    console.log(`Artifact Sync: ------------------------------------------`);
+    console.log(`Artifact Sync: Analyzing Attachment ${index + 1}/${attachmentList.length}`);
+    console.log("Artifact Sync: Image Src:", img.src);
+    console.log("Artifact Sync: Image Alt:", img.alt);
 
     let bestName = null;
     const candidates = [];
 
-    const addCandidate = (val) => {
-      if (val && typeof val === 'string' && val.trim().length > 0) candidates.push(val.trim());
+    const addCandidate = (source, val) => {
+      if (val && typeof val === 'string' && val.trim().length > 0) {
+        const v = val.trim();
+        console.log(`Artifact Sync: Candidate [${source}]: "${v}"`);
+        candidates.push({ source: source, value: v });
+      }
     };
 
     // 1. Attributes (Image)
-    addCandidate(img.getAttribute('title'));
-    addCandidate(img.getAttribute('aria-label'));
-    addCandidate(img.alt);
+    addCandidate("img.title", img.getAttribute('title'));
+    addCandidate("img.aria-label", img.getAttribute('aria-label'));
+    addCandidate("img.alt", img.alt);
+    addCandidate("img.data-tooltip", img.getAttribute('data-tooltip'));
 
     // 2. Vicinity Scan (Parents)
     let p = img.parentElement;
     for (let i = 0; i < 4 && p; i++) {
-      // Attributes (Wrapper)
-      addCandidate(p.getAttribute('title'));
-      addCandidate(p.getAttribute('aria-label')); // e.g. "Remove 7.png"
+      addCandidate(`p${i}.title`, p.getAttribute('title'));
+      addCandidate(`p${i}.aria`, p.getAttribute('aria-label'));
+      addCandidate(`p${i}.tooltip`, p.getAttribute('data-tooltip'));
 
-      // TEXT CONTENT SCAN (Crucial)
-      // Split by newlines or tabs to get separate text blocks
+      // TEXT CONTENT SCAN
       const textParts = p.innerText.split(/[\n\t]+/);
       for (const part of textParts) {
-        addCandidate(part);
+        addCandidate(`p${i}.text`, part);
       }
 
-      // Button Search (e.g. "Remove 7.png")
+      // Button Search
       const buttons = p.querySelectorAll('button, [role="button"]');
       buttons.forEach(b => {
-        const label = b.getAttribute('aria-label');
-        if (label) addCandidate(label);
+        addCandidate(`p${i}.btn_label`, b.getAttribute('aria-label'));
       });
 
       p = p.parentElement;
     }
 
-    // console.log("Artifact Sync: Candidates for", img.src, candidates);
-
     const badNames = ["uploaded image preview", "image", "attachment", "preview", "thumbnail", "remove"];
-
+    // Regex for typical filenames
     const filenameRegex = /[a-zA-Z0-9_\-\(\)\s]+\.(png|jpg|jpeg|webp|gif|bmp|txt|csv|pdf|md|json|js|html|css)/i;
 
     // 3. Selection Logic
     for (const c of candidates) {
-      let s = c.trim();
-
-      // Clean "Remove " prefix if present (common in aria-labels)
-      if (s.toLowerCase().startsWith("remove ")) {
-        s = s.substring(7).trim();
-      }
+      let s = c.value;
+      if (s.toLowerCase().startsWith("remove ")) s = s.substring(7).trim();
 
       if (badNames.some(b => s.toLowerCase() === b)) continue;
       if (badNames.some(b => s.toLowerCase().includes(b) && !s.includes('.'))) continue;
-      // Allow "Attachment.png" but not "Attachment"
 
       // Check Regex
       const match = s.match(filenameRegex);
       if (match) {
-        // We found something that looks like a filename!
-        // e.g. "7.png" or "my_data.csv"
-        // We'll take the match, or the whole string if it's short
-        if (s.length < 50) bestName = s;
-        else bestName = match[0];
+        if (s.length < 50) {
+          bestName = s;
+          console.log(`Artifact Sync: >>> MATCHED "${s}" from source: ${c.source}`);
+        } else {
+          bestName = match[0];
+          console.log(`Artifact Sync: >>> MATCHED REGEX "${match[0]}" in "${s}" from source: ${c.source}`);
+        }
         break;
       }
     }
 
-    // 4. Fallback (First decent string)
+    // 4. Fallback
     if (!bestName) {
       for (const c of candidates) {
-        let s = c.trim();
+        let s = c.value;
         if (badNames.some(b => s.toLowerCase().includes(b))) continue;
-        // Avoid long blobs of text
         if (s.length > 50) continue;
         bestName = s;
+        console.log(`Artifact Sync: >>> FALLBACK "${s}" from source: ${c.source}`);
         break;
       }
     }
@@ -277,7 +276,6 @@ function finishTurn() {
     // Sanitize
     let safeName = rawName.replace(/[^a-z0-9\.\-_]/gi, '_');
 
-    // Ensure we don't end up with just an extension or empty
     if (safeName.length < 3) safeName = "attachment";
 
     let suffix = "";
