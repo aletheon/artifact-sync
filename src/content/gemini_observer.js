@@ -247,7 +247,7 @@ async function checkTurnCompletion() {
 
     // 3. Extract Content
     // We prefer the full container text to capture tables/lists that might differ from just the first .markdown block
-    let responseText = domToMarkdown(responseNode).trim();
+    let responseText = responseNode.innerText.trim();
 
     // Debug: Check if .markdown was giving us less
     const mdNode = responseNode.querySelector('.markdown');
