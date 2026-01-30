@@ -188,20 +188,59 @@ function finishTurn() {
   console.log(`Artifact Sync: Found ${attachmentList.length} potential attachments via Vicinity Scan.`);
 
   attachmentList.forEach((img, index) => {
-    // PREFER TITLE > ARIA-LABEL > ALT TEXT AS FILENAME
-    // Browsers show tooltips for title.
-    let rawName = img.getAttribute('title') || img.getAttribute('aria-label') || img.alt || "attachment";
+    // STRATEGY: Find the best filename by checking the image and its parents.
+    // Gemini often puts the "7.png" title on a wrapper div, not the img itself.
+    // The img alt is often "Uploaded image preview".
 
-    // Sanitize: Remove extension if doubled, remove bad chars
-    // e.g. "image.png" -> "image_png" -> we want to keep the main name part clean
+    let bestName = null;
+    const candidates = [
+      img.getAttribute('title'),
+      img.getAttribute('aria-label'),
+      img.alt
+    ];
+
+    // Check parents (up to 3 levels up)
+    let p = img.parentElement;
+    for (let i = 0; i < 3 && p; i++) {
+      candidates.push(p.getAttribute('title'));
+      candidates.push(p.getAttribute('aria-label'));
+      p = p.parentElement;
+    }
+
+    const badNames = ["uploaded image preview", "image", "attachment", "preview"];
+
+    // 1. Look for explicit filename format (ends in .png, .jpg, etc)
+    for (const c of candidates) {
+      if (!c) continue;
+      const s = c.trim();
+      if (badNames.some(b => s.toLowerCase().includes(b))) continue;
+
+      // Check for extension
+      if (/\.[a-zA-Z0-9]{3,4}$/.test(s)) {
+        bestName = s;
+        break;
+      }
+    }
+
+    // 2. If no extension found, take first non-bad candidate
+    if (!bestName) {
+      for (const c of candidates) {
+        if (!c) continue;
+        const s = c.trim();
+        if (badNames.some(b => s.toLowerCase().includes(b))) continue;
+        bestName = s;
+        break;
+      }
+    }
+
+    let rawName = bestName || "attachment";
+
+    // Sanitize
     let safeName = rawName.replace(/[^a-z0-9\.\-_]/gi, '_');
 
     // Ensure we don't end up with just an extension or empty
     if (safeName.length < 3) safeName = "attachment";
 
-    // Detect if suffix is needed for duplicates (though duplicates are filtered above, 
-    // multiple files might have same name if user uploads same file twice?)
-    // Actually, simple counter suffix is safer if we have multiple attachments
     let suffix = "";
     if (attachmentList.length > 1) suffix = "_" + (index + 1);
 
@@ -210,7 +249,7 @@ function finishTurn() {
     currentTurn.pendingAttachments.push({
       filename: filename,
       url: img.src,
-      alt: rawName // Use the best name found for metadata too
+      alt: rawName
     });
   });
 
