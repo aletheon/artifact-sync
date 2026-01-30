@@ -90,10 +90,13 @@ function findResponseFallback(userNode) {
 
     // 2. Row/Parent Scan (Specific)
     let parent = userNode.parentElement;
-    for (let i = 0; i < 4 && parent && parent.tagName !== 'MAIN'; i++) {
+    for (let i = 0; i < 15 && parent && parent.tagName !== 'MAIN'; i++) {
+        console.log(`Artifact Sync: Ancestor Level ${i}:`, parent.tagName, parent.className);
+
         let pNext = parent.nextElementSibling;
-        while (pNext) {
-            console.log("Artifact Sync: Scanning uncle:", pNext.tagName, pNext.className);
+        let pAttempts = 0;
+        while (pNext && pAttempts < 10) {
+            console.log(`Artifact Sync: Scanning uncle (L${i}):`, pNext.tagName, pNext.className);
             if (isModel(pNext)) {
                 console.log("Artifact Sync: Found response via Uncle Scan!", pNext);
                 return pNext;
@@ -111,6 +114,7 @@ function findResponseFallback(userNode) {
                 }
             }
             pNext = pNext.nextElementSibling;
+            pAttempts++;
         }
         parent = parent.parentElement;
     }
