@@ -186,6 +186,14 @@ async function checkTurnCompletion() {
 
     // 1. Locate Response Node
     let responseNode = currentTurn.responseNode;
+
+    // VALIDATION: Is cached node still in DOM?
+    if (responseNode && !responseNode.isConnected) {
+        console.log("Artifact Sync: Cached response node was detached from DOM. Rescanning...");
+        responseNode = null;
+        currentTurn.responseNode = null;
+    }
+
     if (!responseNode) {
         responseNode = findResponseFallback(currentTurn.promptNode);
     }
@@ -220,7 +228,7 @@ async function checkTurnCompletion() {
 
     // 6. Check for completion (Empty text + no images = still generating?)
     if (responseText.length < 2 && responseImages.length === 0) {
-        // Still thinking?
+        console.log(`Artifact Sync: Response incomplete (Len: ${responseText.length}, Imgs: ${responseImages.length}). Waiting...`);
         currentTurn.lastUpdate = now;
         currentTurn.timer = setTimeout(checkTurnCompletion, 2000);
         return;
