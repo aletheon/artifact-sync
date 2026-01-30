@@ -136,7 +136,12 @@ function checkTurnCompletion() {
   });
 
   // 2. Find Response
-  const responseNode = findResponseAfter(currentTurn.promptNode);
+  let responseNode = currentTurn.responseNode; // Priority: Mutation Detected
+
+  if (!responseNode) {
+    // Fallback: Traversal
+    responseNode = findResponseAfter(currentTurn.promptNode);
+  }
 
   if (!responseNode) {
     if (now - currentTurn.startTime > MAX_WAIT_TIME) {
@@ -151,6 +156,9 @@ function checkTurnCompletion() {
     return;
   }
 
+  // Update the tracker if we found it via fallback
+  currentTurn.responseNode = responseNode;
+  console.log("Artifact Sync: Response Node Active.");
 
   // 3. TEXT EXTRACTION
   const responseText = domToMarkdown(responseNode).trim();
@@ -216,37 +224,10 @@ function resetTurn() {
   if (currentTurn.timer) clearTimeout(currentTurn.timer);
   currentTurn.status = 'IDLE';
   currentTurn.promptNode = null;
+  currentTurn.responseNode = null;
   currentTurn.pendingImages = [];
   currentTurn.pendingAttachments = [];
 }
-
-// 2. Find Response
-const responseNode = findResponseAfter(currentTurn.promptNode);
-
-if (!responseNode) {
-  if (now - currentTurn.startTime > MAX_WAIT_TIME) {
-    console.log("Artifact Sync: Timed out. Could not find response node.");
-    resetTurn();
-    return;
-  }
-  // console.log("Artifact Sync: Waiting for response..."); 
-  // Reduce noise, only log every 5s or state change
-  currentTurn.status = 'RECORDING';
-  currentTurn.lastUpdate = now;
-  if (currentTurn.timer) clearTimeout(currentTurn.timer);
-  currentTurn.timer = setTimeout(checkTurnCompletion, 2000);
-  return;
-}
-
-console.log("Artifact Sync: Response Node Found.");
-
-// 3. TEXT EXTRACTION
-const responseText = domToMarkdown(responseNode).trim();
-
-// ... (rest of function unchanged until resetTurn) ...
-// To avoid tedious scrolling, I will just patch the handleMutation and findResponse logic mainly.
-
-// ... (skipping to handleMutation replacement) ...
 
 function handleMutation(mutations) {
   const now = Date.now();
@@ -257,28 +238,45 @@ function handleMutation(mutations) {
       for (const node of mutation.addedNodes) {
         if (node.nodeType !== Node.ELEMENT_NODE) continue;
 
-        // BROADENED SELECTOR STRATEGY
+        // A. Check for USER Message
         let userMatch = null;
-
-        // 1. Classic Class
         if (node.matches && node.matches('.user-query-bubble-with-background')) userMatch = node;
         else if (node.querySelector) userMatch = node.querySelector('.user-query-bubble-with-background');
 
-        // 2. Semantic Attribute (Backup)
         if (!userMatch) {
           if (node.matches && node.matches('[data-message-author-role="user"]')) userMatch = node;
           else if (node.querySelector) userMatch = node.querySelector('[data-message-author-role="user"]');
         }
 
         if (userMatch) {
-          console.log("Artifact Sync: User Message Detected via Mutation!", userMatch);
+          console.log("Artifact Sync: User Message Detected!", userMatch);
           if (currentTurn.status === 'SAVING') continue;
-          if (currentTurn.timer) clearTimeout(currentTurn.timer);
+
+          resetTurn(); // Clear old state
           currentTurn.status = 'RECORDING';
           currentTurn.promptNode = userMatch;
           currentTurn.startTime = now;
           currentTurn.lastUpdate = now;
           interactionDetected = true;
+        }
+
+        // B. Check for MODEL Message (Event-Based Discovery)
+        if (currentTurn.status === 'RECORDING' && currentTurn.promptNode) {
+          let modelMatch = null;
+          // 1. Attribute check
+          if (node.getAttribute && node.getAttribute('data-message-author-role') === 'model') modelMatch = node;
+          // 2. Class check
+          else if (node.classList && node.classList.contains('model-query-bubble')) modelMatch = node;
+          else if (node.querySelector && node.querySelector('.model-query-bubble')) modelMatch = node.querySelector('.model-query-bubble');
+
+          if (modelMatch) {
+            // Ensure it comes AFTER the user prompt
+            const comparison = currentTurn.promptNode.compareDocumentPosition(modelMatch);
+            if (comparison & Node.DOCUMENT_POSITION_FOLLOWING) {
+              console.log("Artifact Sync: Model Response Detected via Mutation!", modelMatch);
+              currentTurn.responseNode = modelMatch;
+            }
+          }
         }
       }
     }
