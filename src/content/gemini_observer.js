@@ -177,7 +177,14 @@ function findResponseFallback(userNode) {
     let next = userNode.nextElementSibling;
     let attempts = 0;
     while (next && attempts < 50) {
-        // Skip blacklisted nodes
+        // Skip blacklisted nodes (DOM attribute)
+        if (next.getAttribute('data-as-failed')) {
+            next = next.nextElementSibling;
+            attempts++;
+            continue;
+        }
+
+        // Skip blacklisted nodes (Memory - legacy/backup)
         if (currentTurn.failedNodes.has(next)) {
             next = next.nextElementSibling;
             attempts++;
@@ -188,22 +195,27 @@ function findResponseFallback(userNode) {
 
         // Track Pending/Model tags as backups
         if (next.tagName === 'PENDING-RESPONSE' || next.tagName === 'MODEL-RESPONSE') {
-            pendingCandidate = next;
+            if (!next.getAttribute('data-as-failed')) pendingCandidate = next;
         }
 
         if (isModel(next)) {
             console.log("Artifact Sync: Found response via Sibling Scan!", next);
             return next;
         }
-        // Deep check for markdown if the tag itself isn't obvious
-        if (next.querySelector('response-container')) {
+
+        // Deep checks - Validate against blacklist
+        const container = next.querySelector('response-container');
+        if (container && !container.getAttribute('data-as-failed')) {
             console.log("Artifact Sync: Found response via Sibling->Container Scan!", next);
-            return next.querySelector('response-container');
+            return container;
         }
-        if (next.querySelector('.markdown')) {
+
+        const md = next.querySelector('.markdown');
+        if (md && !md.getAttribute('data-as-failed')) {
             console.log("Artifact Sync: Found response via Sibling->Markdown Scan!", next);
-            return next;
+            return md;
         }
+
         next = next.nextElementSibling;
         attempts++;
     }
@@ -217,7 +229,7 @@ function findResponseFallback(userNode) {
         let pAttempts = 0;
         while (pNext && pAttempts < 50) {
             // Skip blacklisted nodes
-            if (currentTurn.failedNodes.has(pNext)) {
+            if (pNext.getAttribute('data-as-failed') || currentTurn.failedNodes.has(pNext)) {
                 pNext = pNext.nextElementSibling;
                 pAttempts++;
                 continue;
@@ -227,32 +239,33 @@ function findResponseFallback(userNode) {
 
             // Track Pending/Model tags as backups
             if (pNext.tagName === 'PENDING-RESPONSE' || pNext.tagName === 'MODEL-RESPONSE') {
-                pendingCandidate = pNext;
+                if (!pNext.getAttribute('data-as-failed')) pendingCandidate = pNext;
             }
 
             if (isModel(pNext)) {
                 console.log("Artifact Sync: Found response via Uncle Scan!", pNext);
                 return pNext;
             }
+
             if (pNext.querySelector) {
                 const bubble = pNext.querySelector('.model-query-bubble');
-                if (bubble) {
+                if (bubble && !bubble.getAttribute('data-as-failed')) {
                     console.log("Artifact Sync: Found response via Uncle->Child Scan!", bubble);
                     return bubble;
                 }
                 const roleModel = pNext.querySelector('[data-message-author-role="model"]');
-                if (roleModel) {
+                if (roleModel && !roleModel.getAttribute('data-as-failed')) {
                     console.log("Artifact Sync: Found response via Uncle->Role Scan!", roleModel);
                     return roleModel;
                 }
                 const container = pNext.querySelector('response-container');
-                if (container) {
+                if (container && !container.getAttribute('data-as-failed')) {
                     console.log("Artifact Sync: Found response via Uncle->Container Scan!", container);
                     return container;
                 }
                 // Generic Markdown Check (Strong Fallback)
                 const markdown = pNext.querySelector('.markdown');
-                if (markdown) {
+                if (markdown && !markdown.getAttribute('data-as-failed')) {
                     console.log("Artifact Sync: Found response via Uncle->Markdown Scan!", markdown);
                     return markdown;
                 }
