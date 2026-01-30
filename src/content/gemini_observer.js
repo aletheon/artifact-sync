@@ -12,7 +12,8 @@ const currentTurn = {
     timer: null,
     startTime: 0,
     lastUpdate: 0,
-    lastLength: 0
+    lastLength: 0,
+    emptyChecks: 0
 };
 
 const DEBOUNCE_TIME = 2000;
@@ -303,13 +304,11 @@ async function checkTurnCompletion() {
 
     // 3. Extract Content
     // Use Shadow-piercing text extraction
-    let responseText = getDeepText(responseNode).trim();
-
     // Fallback: If getDeepText fails (e.g. edge cases), try innerText
-    if (!responseText) responseText = responseNode.innerText.trim();
+    const rawText = getDeepText(responseNode).trim() || responseNode.innerText.trim();
+    console.log(`Artifact Sync: Raw text (first 50 chars): "${rawText.substring(0, 50).replace(/\n/g, '\\n')}..."`);
 
-    // CLEANUP: Normalize whitespace and remove UI noise
-    responseText = cleanMarkdown(responseText);
+    let responseText = cleanMarkdown(rawText);
 
     console.log(`Artifact Sync: Extracted text length: ${responseText.length}`);
 
@@ -338,11 +337,24 @@ async function checkTurnCompletion() {
 
     // 6. Check for completion (Empty text + no images = still generating?)
     if (responseText.length < 2 && responseImages.length === 0) {
-        console.log(`Artifact Sync: Response incomplete (Len: ${responseText.length}, Imgs: ${responseImages.length}). Waiting...`);
+        currentTurn.emptyChecks++;
+        console.log(`Artifact Sync: Response incomplete (Len: ${responseText.length}, Imgs: ${responseImages.length}). Check ${currentTurn.emptyChecks}/5.`);
+
+        if (currentTurn.emptyChecks > 5) {
+            console.log("Artifact Sync: Response node text persistently empty. Abandoning and rescanning...");
+            currentTurn.responseNode = null;
+            currentTurn.emptyChecks = 0;
+            currentTurn.timer = setTimeout(checkTurnCompletion, 200);
+            return;
+        }
+
         currentTurn.lastUpdate = now;
         currentTurn.timer = setTimeout(checkTurnCompletion, 2000);
         return;
     }
+
+    // Reset empty checks if we have content
+    currentTurn.emptyChecks = 0;
 
     // 6b. STABILITY CHECK: Is it still streaming?
     if (responseText.length !== currentTurn.lastLength) {
