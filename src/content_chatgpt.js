@@ -111,8 +111,60 @@ function extractAttachments(node, safePrompt, timestamp) {
         if (img.width < 50 || img.height < 50) return;
         if (img.alt === "User") return;
 
-        // PREFER TITLE > ARIA-LABEL > ALT TEXT
-        const rawName = img.getAttribute('title') || img.getAttribute('aria-label') || img.alt || "attachment";
+        // STRATEGY (v4): Visual Text & Regex Scan for ChatGPT
+        let bestName = null;
+        const candidates = [];
+
+        const addCandidate = (val) => {
+            if (val && typeof val === 'string' && val.trim().length > 0) candidates.push(val.trim());
+        };
+
+        addCandidate(img.getAttribute('title'));
+        addCandidate(img.getAttribute('aria-label'));
+        addCandidate(img.alt);
+
+        // Vicinity Scan
+        let p = img.parentElement;
+        for (let i = 0; i < 4 && p; i++) {
+            addCandidate(p.getAttribute('title'));
+            addCandidate(p.getAttribute('aria-label'));
+
+            // Text Scan
+            const textParts = p.innerText.split(/[\n\t]+/);
+            for (const part of textParts) addCandidate(part);
+
+            p = p.parentElement;
+        }
+
+        const badNames = ["uploaded image", "image", "attachment", "preview", "user"];
+        const filenameRegex = /[a-zA-Z0-9_\-\(\)\s]+\.(png|jpg|jpeg|webp|gif|bmp|txt|csv|pdf|md|json|js|html|css)/i;
+
+        for (const c of candidates) {
+            let s = c.trim();
+            if (s.toLowerCase().startsWith("remove ")) s = s.substring(7).trim();
+
+            if (badNames.some(b => s.toLowerCase() === b)) continue;
+            if (badNames.some(b => s.toLowerCase().includes(b) && !s.includes('.'))) continue;
+
+            const match = s.match(filenameRegex);
+            if (match) {
+                if (s.length < 50) bestName = s;
+                else bestName = match[0];
+                break;
+            }
+        }
+
+        if (!bestName) {
+            for (const c of candidates) {
+                let s = c.trim();
+                if (badNames.some(b => s.toLowerCase().includes(b))) continue;
+                if (s.length > 50) continue;
+                bestName = s;
+                break;
+            }
+        }
+
+        const rawName = bestName || "attachment";
         let safeName = rawName.replace(/[^a-z0-9\.\-_]/gi, '_');
 
         if (safeName.length < 3) safeName = "attachment";

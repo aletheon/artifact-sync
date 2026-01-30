@@ -188,63 +188,85 @@ function finishTurn() {
   console.log(`Artifact Sync: Found ${attachmentList.length} potential attachments via Vicinity Scan.`);
 
   attachmentList.forEach((img, index) => {
-    // STRATEGY (v3): Deep Search for Filename
-    // The user sees "7.png" on hover. This implies a tooltip.
-    // We check: title, aria-label, data-tooltip, dataset.tooltip
-    // We check: img, and up to 5 parents.
+    // STRATEGY (v4): Visual Text & Regex Scan
+    // The user sees the text "7.png" on the screen. 
+    // We shouldn't rely on specific class names (which change) or attributes (which might be missing).
+    // We will grab the full text of the wrapper and look for the filename pattern.
 
     let bestName = null;
     const candidates = [];
 
     const addCandidate = (val) => {
-      if (val && typeof val === 'string' && val.trim().length > 0) candidates.push(val);
+      if (val && typeof val === 'string' && val.trim().length > 0) candidates.push(val.trim());
     };
 
-    // 1. Check Image Attributes
+    // 1. Attributes (Image)
     addCandidate(img.getAttribute('title'));
     addCandidate(img.getAttribute('aria-label'));
-    addCandidate(img.getAttribute('data-tooltip'));
     addCandidate(img.alt);
 
-    // 2. Check Parents (up to 5 levels)
-    // Sometimes the tooltip is on a wrapper far up.
+    // 2. Vicinity Scan (Parents)
     let p = img.parentElement;
-    for (let i = 0; i < 5 && p; i++) {
+    for (let i = 0; i < 4 && p; i++) {
+      // Attributes (Wrapper)
       addCandidate(p.getAttribute('title'));
-      addCandidate(p.getAttribute('aria-label'));
-      addCandidate(p.getAttribute('data-tooltip'));
+      addCandidate(p.getAttribute('aria-label')); // e.g. "Remove 7.png"
 
-      // Also look for specific classes that might hold the filename?
-      // e.g. .file-name
-      const nameEl = p.querySelector('.file-name, .name, [class*="filename"]');
-      if (nameEl) addCandidate(nameEl.innerText);
+      // TEXT CONTENT SCAN (Crucial)
+      // Split by newlines or tabs to get separate text blocks
+      const textParts = p.innerText.split(/[\n\t]+/);
+      for (const part of textParts) {
+        addCandidate(part);
+      }
+
+      // Button Search (e.g. "Remove 7.png")
+      const buttons = p.querySelectorAll('button, [role="button"]');
+      buttons.forEach(b => {
+        const label = b.getAttribute('aria-label');
+        if (label) addCandidate(label);
+      });
 
       p = p.parentElement;
     }
 
-    console.log("Artifact Sync: Attachment Candidates for", img.src.substring(0, 30) + "...", candidates);
+    // console.log("Artifact Sync: Candidates for", img.src, candidates);
 
-    const badNames = ["uploaded image preview", "image", "attachment", "preview", "thumbnail"];
+    const badNames = ["uploaded image preview", "image", "attachment", "preview", "thumbnail", "remove"];
 
-    // 3. Filter & Pick
-    // Priority: Has Extension > Not Bad > Fallback
+    const filenameRegex = /[a-zA-Z0-9_\-\(\)\s]+\.(png|jpg|jpeg|webp|gif|bmp|txt|csv|pdf|md|json|js|html|css)/i;
+
+    // 3. Selection Logic
     for (const c of candidates) {
-      const s = c.trim();
-      // Skip bad names immediately
-      if (badNames.some(b => s.toLowerCase().includes(b))) continue;
+      let s = c.trim();
 
-      // Check for extension (strong signal)
-      if (/\.[a-zA-Z0-9]{3,4}$/.test(s)) {
-        bestName = s;
-        break; // Found it!
+      // Clean "Remove " prefix if present (common in aria-labels)
+      if (s.toLowerCase().startsWith("remove ")) {
+        s = s.substring(7).trim();
+      }
+
+      if (badNames.some(b => s.toLowerCase() === b)) continue;
+      if (badNames.some(b => s.toLowerCase().includes(b) && !s.includes('.'))) continue;
+      // Allow "Attachment.png" but not "Attachment"
+
+      // Check Regex
+      const match = s.match(filenameRegex);
+      if (match) {
+        // We found something that looks like a filename!
+        // e.g. "7.png" or "my_data.csv"
+        // We'll take the match, or the whole string if it's short
+        if (s.length < 50) bestName = s;
+        else bestName = match[0];
+        break;
       }
     }
 
-    // 4. Fallback: If no extension found, take the first reasonable string
+    // 4. Fallback (First decent string)
     if (!bestName) {
       for (const c of candidates) {
-        const s = c.trim();
+        let s = c.trim();
         if (badNames.some(b => s.toLowerCase().includes(b))) continue;
+        // Avoid long blobs of text
+        if (s.length > 50) continue;
         bestName = s;
         break;
       }
