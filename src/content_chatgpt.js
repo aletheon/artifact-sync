@@ -111,14 +111,15 @@ function extractAttachments(node, safePrompt, timestamp) {
         if (img.width < 50 || img.height < 50) return;
         if (img.alt === "User") return;
 
-        const rawName = img.alt || "attachment";
+        // PREFER TITLE > ARIA-LABEL > ALT TEXT
+        const rawName = img.getAttribute('title') || img.getAttribute('aria-label') || img.alt || "attachment";
         let safeName = rawName.replace(/[^a-z0-9\.\-_]/gi, '_');
 
         if (safeName.length < 3) safeName = "attachment";
 
         const suffix = list.length > 0 ? `_${list.length + 1}` : "";
         const filename = `${safePrompt}_${timestamp}_${safeName}${suffix}.png`;
-        list.push({ src: img.src, filename: filename, alt: img.alt || "attachment" });
+        list.push({ src: img.src, filename: filename, alt: rawName });
     });
     return list;
 }

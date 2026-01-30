@@ -188,9 +188,12 @@ function finishTurn() {
   console.log(`Artifact Sync: Found ${attachmentList.length} potential attachments via Vicinity Scan.`);
 
   attachmentList.forEach((img, index) => {
-    // PREFER ALT TEXT AS FILENAME
-    let rawName = img.alt || "attachment";
+    // PREFER TITLE > ARIA-LABEL > ALT TEXT AS FILENAME
+    // Browsers show tooltips for title.
+    let rawName = img.getAttribute('title') || img.getAttribute('aria-label') || img.alt || "attachment";
+
     // Sanitize: Remove extension if doubled, remove bad chars
+    // e.g. "image.png" -> "image_png" -> we want to keep the main name part clean
     let safeName = rawName.replace(/[^a-z0-9\.\-_]/gi, '_');
 
     // Ensure we don't end up with just an extension or empty
@@ -207,7 +210,7 @@ function finishTurn() {
     currentTurn.pendingAttachments.push({
       filename: filename,
       url: img.src,
-      alt: img.alt || "attachment"
+      alt: rawName // Use the best name found for metadata too
     });
   });
 
