@@ -125,7 +125,33 @@ function findResponseFallback(userNode) {
 
 // --- CORE LOGIC ---
 
-function checkTurnCompletion() {
+// --- PERSISTENCE HELPERS ---
+
+function getChatId() {
+    // URL format: https://gemini.google.com/app/123456...
+    const match = window.location.pathname.match(/\/app\/([a-zA-Z0-9]+)/);
+    return match ? match[1] : 'default';
+}
+
+async function loadLastPrompt() {
+    const chatId = getChatId();
+    return new Promise((resolve) => {
+        chrome.storage.local.get([`last_prompt_${chatId}`], (result) => {
+            resolve(result[`last_prompt_${chatId}`] || "");
+        });
+    });
+}
+
+async function saveLastPrompt(promptText) {
+    const chatId = getChatId();
+    const key = `last_prompt_${chatId}`;
+    await chrome.storage.local.set({ [key]: promptText });
+    lastProcessedPrompt = promptText;
+}
+
+// --- CORE LOGIC ---
+
+async function checkTurnCompletion() {
     const now = Date.now();
     if (currentTurn.status !== 'RECORDING') return;
 
@@ -174,7 +200,18 @@ function checkTurnCompletion() {
     }
 
     // 7. Success - Build Payload
+    // DEDUPLICATION: Check against persistent storage
     if (promptText === lastProcessedPrompt) {
+        console.log("Artifact Sync: Prompt matches last saved (Memory). Skipping.");
+        resetTurn();
+        return;
+    }
+
+    // Double check storage just in case (race condition or first load)
+    const storedLast = await loadLastPrompt();
+    if (promptText === storedLast) {
+        console.log("Artifact Sync: Prompt matches last saved (Storage). Skipping.");
+        lastProcessedPrompt = storedLast; // Sync memory
         resetTurn();
         return;
     }
@@ -211,7 +248,9 @@ function checkTurnCompletion() {
 
     console.log("Artifact Sync: Sending completed turn payload...", payload);
     chrome.runtime.sendMessage({ action: 'SAVE_TURN', data: payload });
-    lastProcessedPrompt = promptText;
+
+    // Update Persistence
+    await saveLastPrompt(promptText);
     resetTurn();
 }
 
@@ -342,4 +381,10 @@ function handleMutation(mutations) {
 }
 
 const observer = new MutationObserver(handleMutation);
-observer.observe(document.body, { childList: true, subtree: true });
+
+// Initialize: Load last prompt for this chat ID
+loadLastPrompt().then(val => {
+    lastProcessedPrompt = val;
+    console.log("Artifact Sync: Loaded last history prompt =>", val.substring(0, 50) + "...");
+    observer.observe(document.body, { childList: true, subtree: true });
+});
