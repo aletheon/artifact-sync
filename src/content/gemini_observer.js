@@ -179,6 +179,9 @@ function checkTurnCompletion() {
         return;
     }
 
+    // VISUAL DEBUG: Highlight Response (Green)
+    highlightNode(responseNode, '2px solid #00ff00'); // Green
+
     // Process Files
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const safePrompt = promptText.replace(/[^a-z0-9]/gi, '_').substring(0, 40);
@@ -213,6 +216,10 @@ function checkTurnCompletion() {
 }
 
 function resetTurn() {
+    // Clear Highlights
+    if (currentTurn.promptNode) highlightNode(currentTurn.promptNode, '');
+    if (currentTurn.responseNode) highlightNode(currentTurn.responseNode, '');
+
     if (currentTurn.timer) clearTimeout(currentTurn.timer);
     currentTurn.status = 'IDLE';
     currentTurn.promptNode = null;
@@ -220,6 +227,19 @@ function resetTurn() {
     currentTurn.responseNode = null;
     currentTurn.pendingImages = [];
     currentTurn.pendingAttachments = [];
+}
+
+// Visual Debug Helper
+function highlightNode(node, style) {
+    if (node && node.style) {
+        node.style.border = style;
+        // Optionally add a label
+        if (style) {
+            node.setAttribute('data-artifact-sync', 'target');
+        } else {
+            node.removeAttribute('data-artifact-sync');
+        }
+    }
 }
 
 // --- OBSERVER ---
@@ -289,6 +309,10 @@ function handleMutation(mutations) {
                 currentTurn.promptText = newText;
                 currentTurn.startTime = now;
                 currentTurn.lastUpdate = now;
+
+                // VISUAL DEBUG: Highlight Prompt (Red)
+                highlightNode(userMatch, '2px solid #ff0000');
+
                 interactionDetected = true;
             }
 
