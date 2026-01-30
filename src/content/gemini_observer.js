@@ -1,6 +1,7 @@
 console.log("Artifact Sync: Gemini Observer Loaded (v2.0 Rebuild)");
 
 let lastProcessedPrompt = "";
+let currentChatId = null;
 
 const currentTurn = {
     status: 'IDLE', // IDLE, RECORDING, SAVING
@@ -575,6 +576,30 @@ function highlightNode(node, style) {
 
 function handleMutation(mutations) {
     const now = Date.now();
+
+    // 0. CHAT SWITCH DETECTION
+    const activeChatId = getChatId();
+    if (activeChatId !== currentChatId) {
+        console.log(`Artifact Sync: Chat Switched (${currentChatId} -> ${activeChatId}). Resetting state.`);
+        currentChatId = activeChatId;
+        resetTurn();
+        // Reset last prompt to prevent matching previous chat's content against old prompt
+        lastProcessedPrompt = "";
+        // Async load the correct one (will settle quickly)
+        loadLastPrompt().then(p => {
+            console.log(`Artifact Sync: Loaded last prompt for new chat: "${p.substring(0, 30)}..."`);
+            // We don't perform a direct assignment here because loadLastPrompt already updates the global if we didn't change it.
+            // Actually loadLastPrompt returns it.
+            lastProcessedPrompt = p;
+        });
+
+        // Return early to let state settle? 
+        // If we process mutations now, lastProcessedPrompt is "" so we might re-save the last message of the NEW chat.
+        // That is Bad.
+        // We should probably pause processing until loaded.
+        return;
+    }
+
     let interactionDetected = false;
 
     for (const mutation of mutations) {
