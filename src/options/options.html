@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Artifact Sync Options</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 500px; }
+    label { display: block; margin-bottom: 15px; cursor: pointer; }
+    select { padding: 5px; }
+    h2 { color: #333; }
+    .status { margin-top: 20px; color: green; display: none; }
+  </style>
+</head>
+<body>
+  <h2>Artifact Sync Settings</h2>
+  
+  <label>
+    <strong>Storage Location:</strong><br>
+    <select id="storageMode">
+      <option value="LOCAL">Local (Downloads Folder)</option>
+      <option value="DRIVE">Google Drive</option>
+    </select>
+  </label>
+
+  <button id="save">Save Settings</button>
+  <div id="status" class="status">Settings Saved!</div>
+
+  <script src="options.js"></script>
+</body>
+</html>

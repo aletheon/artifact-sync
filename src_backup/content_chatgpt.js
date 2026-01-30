@@ -1,3 +1,4 @@
+
 // content_chatgpt.js
 console.log("Artifact Sync: ChatGPT Scraper Loaded.");
 

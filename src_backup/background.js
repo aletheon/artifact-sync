@@ -1,3 +1,4 @@
+
 // background.js (ES Module)
 // Import libs FIRST to ensure side-effects run
 import './lib/jspdf.js';

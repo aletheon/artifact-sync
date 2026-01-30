@@ -1,0 +1,302 @@
+console.log("Artifact Sync: Gemini Observer Loaded (v2.0 Rebuild)");
+
+let lastProcessedPrompt = "";
+
+const currentTurn = {
+    status: 'IDLE', // IDLE, RECORDING, SAVING
+    promptNode: null,
+    promptText: "",
+    responseNode: null,
+    pendingImages: [],
+    pendingAttachments: [],
+    timer: null,
+    startTime: 0,
+    lastUpdate: 0
+};
+
+const DEBOUNCE_TIME = 2000;
+const MAX_WAIT_TIME = 60000; // 60s timeout
+
+// --- DOM HELPERS ---
+
+function getConversationTitle() {
+    const titleEl = document.querySelector('.conversation-title');
+    if (titleEl) return titleEl.innerText.trim();
+    return document.title.replace("Gemini", "").trim() || "Conversation";
+}
+
+function domToMarkdown(node) {
+    return node.innerText || "";
+}
+
+function extractAttachments(promptNode) {
+    const candidates = [];
+    const scanNode = (n) => {
+        if (!n || !n.querySelectorAll) return;
+        const imgs = n.querySelectorAll('img');
+        imgs.forEach(img => candidates.push(img));
+        if (n.tagName === 'IMG') candidates.push(n);
+    };
+
+    // 1. Scan Inside
+    scanNode(promptNode);
+    // 2. Scan Parent (Wrapper)
+    if (promptNode.parentElement) scanNode(promptNode.parentElement);
+    // 3. Scan Previous Sibling (Separate Block)
+    if (promptNode.previousElementSibling) scanNode(promptNode.previousElementSibling);
+    // 4. Scan Row Above
+    if (promptNode.parentElement && promptNode.parentElement.previousElementSibling) {
+        scanNode(promptNode.parentElement.previousElementSibling);
+    }
+
+    const list = [];
+    candidates.forEach(img => {
+        if (img.width < 50 || img.height < 50) return;
+        if (img.src.includes("googleusercontent.com") && img.src.includes("s64")) return;
+        if (img.className.includes("avatar")) return;
+        if (list.includes(img)) return;
+
+        list.push(img);
+    });
+    return list;
+}
+
+const isModel = (n) => {
+    if (!n || n.nodeType !== Node.ELEMENT_NODE) return false;
+    // Known specific selectors
+    if (n.getAttribute('data-message-author-role') === 'model') return true;
+    if (n.classList.contains('model-query-bubble')) return true;
+    if (n.classList.contains('message-content')) return true;
+
+    // Structure-based heuristic: If it has "text" class or looks like a message
+    if (n.classList.contains('markdown')) return true;
+
+    return false;
+};
+
+function findResponseFallback(userNode) {
+    // 1. Sibling Scan (Specific)
+    let next = userNode.nextElementSibling;
+    while (next) {
+        if (isModel(next)) return next;
+        next = next.nextElementSibling;
+    }
+
+    // 2. Row/Parent Scan (Specific)
+    let parent = userNode.parentElement;
+    for (let i = 0; i < 4 && parent && parent.tagName !== 'MAIN'; i++) {
+        let pNext = parent.nextElementSibling;
+        while (pNext) {
+            if (isModel(pNext)) return pNext;
+            if (pNext.querySelector && pNext.querySelector('.model-query-bubble')) return pNext.querySelector('.model-query-bubble');
+            if (pNext.querySelector && pNext.querySelector('[data-message-author-role="model"]')) return pNext.querySelector('[data-message-author-role="model"]');
+            pNext = pNext.nextElementSibling;
+        }
+        parent = parent.parentElement;
+    }
+
+    // 3. Last Resort (Global Specific)
+    const allModelNodes = document.querySelectorAll('[data-message-author-role="model"], .model-query-bubble, .message-content');
+    for (const modelNode of allModelNodes) {
+        if (userNode.compareDocumentPosition(modelNode) & Node.DOCUMENT_POSITION_FOLLOWING) {
+            console.log("Artifact Sync: Link established via Global Scan.");
+            return modelNode;
+        }
+    }
+
+    // 4. BLIND STRUCTURAL FALLBACK (New)
+    // If specific selectors failed, find the first substantial sibling in the DOM flow.
+    // We assume the model response comes *after* the user node.
+    // We skip "Searching..." or tiny nodes.
+
+    // Try scanning global "markdown" nodes after user
+    const markdownNodes = document.querySelectorAll('.markdown');
+    for (const md of markdownNodes) {
+        if (userNode.compareDocumentPosition(md) & Node.DOCUMENT_POSITION_FOLLOWING) {
+            // Basic sanity check: Is it reasonably close? 
+            // (We accept it for now as it's better than nothing)
+            console.log("Artifact Sync: Link established via Blind Structural Scan (Markdown class).");
+            return md;
+        }
+    }
+
+    return null;
+}
+
+// --- CORE LOGIC ---
+
+function checkTurnCompletion() {
+    const now = Date.now();
+    if (currentTurn.status !== 'RECORDING') return;
+
+    const promptText = currentTurn.promptNode.innerText.trim();
+
+    // 1. Locate Response Node
+    let responseNode = currentTurn.responseNode;
+    if (!responseNode) {
+        responseNode = findResponseFallback(currentTurn.promptNode);
+    }
+
+    if (!responseNode) {
+        if (now - currentTurn.startTime > MAX_WAIT_TIME) {
+            console.log("Artifact Sync: Timed out looking for response.");
+            resetTurn();
+            return;
+        }
+        currentTurn.status = 'RECORDING';
+        currentTurn.lastUpdate = now;
+        if (currentTurn.timer) clearTimeout(currentTurn.timer);
+        currentTurn.timer = setTimeout(checkTurnCompletion, 2000); // 2s polling
+        return;
+    }
+
+    // 2. Found it!
+    currentTurn.responseNode = responseNode;
+
+    // 3. Extract Content
+    const responseText = domToMarkdown(responseNode).trim();
+
+    // 4. Extract Artifacts (Images in Response)
+    const responseImages = [];
+    responseNode.querySelectorAll('img').forEach(img => {
+        if (img.width > 100 && img.height > 100) responseImages.push(img);
+    });
+
+    // 5. Extract Attachments
+    const attachmentImgs = extractAttachments(currentTurn.promptNode);
+
+    // 6. Check for completion (Empty text + no images = still generating?)
+    if (responseText.length < 2 && responseImages.length === 0) {
+        // Still thinking?
+        currentTurn.lastUpdate = now;
+        currentTurn.timer = setTimeout(checkTurnCompletion, 2000);
+        return;
+    }
+
+    // 7. Success - Build Payload
+    if (promptText === lastProcessedPrompt) {
+        resetTurn();
+        return;
+    }
+
+    // Process Files
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const safePrompt = promptText.replace(/[^a-z0-9]/gi, '_').substring(0, 40);
+
+    const finalAttachments = attachmentImgs.map((img, idx) => ({
+        url: img.src,
+        filename: `${safePrompt}_${timestamp}_attachment${attachmentImgs.length > 1 ? '_' + (idx + 1) : ''}.png`,
+        alt: "attachment"
+    }));
+
+    const finalArtifacts = responseImages.map((img, idx) => ({
+        url: img.src,
+        filename: `${safePrompt}_${timestamp}${responseImages.length > 1 ? '_' + (idx + 1) : ''}.png`,
+        alt: img.alt || "artifact"
+    }));
+
+    const payload = {
+        title: getConversationTitle(),
+        prompt: promptText,
+        response: responseText,
+        timestamp: timestamp,
+        safePrompt: safePrompt,
+        source: 'Gemini',
+        images: finalArtifacts,
+        attachments: finalAttachments
+    };
+
+    chrome.runtime.sendMessage({ action: 'SAVE_TURN', data: payload });
+    lastProcessedPrompt = promptText;
+    resetTurn();
+}
+
+function resetTurn() {
+    if (currentTurn.timer) clearTimeout(currentTurn.timer);
+    currentTurn.status = 'IDLE';
+    currentTurn.promptNode = null;
+    currentTurn.promptText = "";
+    currentTurn.responseNode = null;
+    currentTurn.pendingImages = [];
+    currentTurn.pendingAttachments = [];
+}
+
+// --- OBSERVER ---
+
+function handleMutation(mutations) {
+    const now = Date.now();
+    let interactionDetected = false;
+
+    for (const mutation of mutations) {
+        if (mutation.type !== 'childList') continue;
+        for (const node of mutation.addedNodes) {
+            if (node.nodeType !== Node.ELEMENT_NODE) continue;
+
+            // A. USER MESSAGE DETECTION
+            let userMatch = null;
+            if (node.matches('.user-query-bubble-with-background')) userMatch = node;
+            else if (node.querySelector) {
+                userMatch = node.querySelector('.user-query-bubble-with-background');
+                if (!userMatch) userMatch = node.querySelector('[data-message-author-role="user"]');
+            }
+
+            if (userMatch) {
+                const newText = userMatch.innerText.trim();
+
+                // Dedupe 1: Active
+                if (currentTurn.status === 'RECORDING' &&
+                    (currentTurn.promptNode === userMatch || currentTurn.promptText === newText)) {
+                    continue; // Ignore re-render
+                }
+                // Dedupe 2: Saved
+                if (newText === lastProcessedPrompt) continue;
+
+                // Dedupe 3: History (Is this the LAST node?)
+                const allUserNodes = document.querySelectorAll('.user-query-bubble-with-background, [data-message-author-role="user"]');
+                if (allUserNodes.length > 0) {
+                    const last = allUserNodes[allUserNodes.length - 1];
+                    if (last !== userMatch && !last.contains(userMatch) && last.innerText.trim() !== newText) {
+                        continue; // Ignore historic re-render
+                    }
+                }
+
+                // New Turn!
+                console.log("Artifact Sync: New User Turn detected.");
+                if (currentTurn.status === 'SAVING') continue; // Busy
+
+                resetTurn();
+                currentTurn.status = 'RECORDING';
+                currentTurn.promptNode = userMatch;
+                currentTurn.promptText = newText;
+                currentTurn.startTime = now;
+                currentTurn.lastUpdate = now;
+                interactionDetected = true;
+            }
+
+            // B. MODEL MESSAGE DETECTION (Event-Based)
+            if (currentTurn.status === 'RECORDING' && currentTurn.promptNode) {
+                let modelMatch = null;
+                if (isModel(node)) modelMatch = node;
+                else if (node.querySelector) {
+                    if (node.classList.contains('model-query-bubble')) modelMatch = node;
+                    else modelMatch = node.querySelector('.model-query-bubble') || node.querySelector('[data-message-author-role="model"]');
+                }
+
+                if (modelMatch) {
+                    if (currentTurn.promptNode.compareDocumentPosition(modelMatch) & Node.DOCUMENT_POSITION_FOLLOWING) {
+                        console.log("Artifact Sync: Model Response Appeared.");
+                        currentTurn.responseNode = modelMatch;
+                    }
+                }
+            }
+        }
+    }
+
+    if (interactionDetected && currentTurn.status !== 'SAVING') {
+        if (currentTurn.timer) clearTimeout(currentTurn.timer);
+        currentTurn.timer = setTimeout(checkTurnCompletion, DEBOUNCE_TIME);
+    }
+}
+
+const observer = new MutationObserver(handleMutation);
+observer.observe(document.body, { childList: true, subtree: true });
