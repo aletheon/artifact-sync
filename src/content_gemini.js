@@ -7,6 +7,8 @@ let lastSavedResponse = "";
 const currentTurn = {
   status: 'IDLE', // IDLE, RECORDING, SAVING
   promptNode: null,
+  promptText: "", // Track text for deduplication
+  responseNode: null,
   pendingImages: [],
   pendingAttachments: [],
   timer: null,
@@ -237,6 +239,7 @@ function resetTurn() {
   if (currentTurn.timer) clearTimeout(currentTurn.timer);
   currentTurn.status = 'IDLE';
   currentTurn.promptNode = null;
+  currentTurn.promptText = "";
   currentTurn.responseNode = null;
   currentTurn.pendingImages = [];
   currentTurn.pendingAttachments = [];
@@ -262,12 +265,17 @@ function handleMutation(mutations) {
         }
 
         if (userMatch) {
-          // DEDUPLICATION: If we are already recording this exact node, ignore updates to it.
-          if (currentTurn.status === 'RECORDING' && currentTurn.promptNode === userMatch) {
+          const newText = userMatch.innerText.trim();
+
+          // DEDUPLICATION: Check against CURRENT actively recording prompt
+          if (currentTurn.status === 'RECORDING' &&
+            (currentTurn.promptNode === userMatch || currentTurn.promptText === newText)) {
+            // It's just a re-render of the same prompt. Ignore.
             continue;
           }
-          // Text-based dedupe (if node ref changes but text is same recent prompt)
-          if (currentTurn.status === 'RECORDING' && userMatch.innerText === lastProcessedPrompt) {
+
+          // Check against LAST SAVED prompt (prevent double-save of same turn)
+          if (newText === lastProcessedPrompt) {
             continue;
           }
 
@@ -277,6 +285,7 @@ function handleMutation(mutations) {
           resetTurn(); // Clear old state
           currentTurn.status = 'RECORDING';
           currentTurn.promptNode = userMatch;
+          currentTurn.promptText = newText;
           currentTurn.startTime = now;
           currentTurn.lastUpdate = now;
           interactionDetected = true;
