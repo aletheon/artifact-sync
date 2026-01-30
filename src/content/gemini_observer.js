@@ -206,6 +206,7 @@ function checkTurnCompletion() {
         attachments: finalAttachments
     };
 
+    console.log("Artifact Sync: Sending completed turn payload...", payload);
     chrome.runtime.sendMessage({ action: 'SAVE_TURN', data: payload });
     lastProcessedPrompt = promptText;
     resetTurn();
@@ -243,11 +244,25 @@ function handleMutation(mutations) {
             if (userMatch) {
                 const newText = userMatch.innerText.trim();
 
-                // Dedupe 1: Active
-                if (currentTurn.status === 'RECORDING' &&
-                    (currentTurn.promptNode === userMatch || currentTurn.promptText === newText)) {
-                    continue; // Ignore re-render
+                // Dedupe 1: Active (Strict Positional Lock)
+                if (currentTurn.status === 'RECORDING') {
+                    // Check 1: Is it the exact same node?
+                    if (currentTurn.promptNode === userMatch) continue;
+
+                    // Check 2: Text Match (Fuzzy)
+                    if (currentTurn.promptText === newText) continue;
+
+                    // Check 3: Positional Lock (CRITICAL)
+                    // If the new node is NOT strictly *after* the current prompt node,
+                    // then it is either a re-render of the current node or a history node.
+                    // We only switch turns if we see a node strictly FOLLOWING the current one.
+                    const position = currentTurn.promptNode.compareDocumentPosition(userMatch);
+                    if (!(position & Node.DOCUMENT_POSITION_FOLLOWING)) {
+                        console.log("Artifact Sync: Ignoring upstream/parallel re-render occurring during active turn.");
+                        continue;
+                    }
                 }
+
                 // Dedupe 2: Saved
                 if (newText === lastProcessedPrompt) continue;
 
@@ -255,8 +270,12 @@ function handleMutation(mutations) {
                 const allUserNodes = document.querySelectorAll('.user-query-bubble-with-background, [data-message-author-role="user"]');
                 if (allUserNodes.length > 0) {
                     const last = allUserNodes[allUserNodes.length - 1];
-                    if (last !== userMatch && !last.contains(userMatch) && last.innerText.trim() !== newText) {
-                        continue; // Ignore historic re-render
+                    // Relaxed check: if userMatch implies it's the last *visual* one
+                    if (last !== userMatch && !last.contains(userMatch)) {
+                        // Double check text
+                        if (last.innerText.trim() !== newText) {
+                            continue;
+                        }
                     }
                 }
 
