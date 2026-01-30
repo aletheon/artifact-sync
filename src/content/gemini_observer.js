@@ -326,13 +326,43 @@ function handleMutation(mutations) {
                 if (newText === lastProcessedPrompt) continue;
 
                 // Dedupe 3: History (Is this the LAST node?)
-                const allUserNodes = document.querySelectorAll('.user-query-bubble-with-background, [data-message-author-role="user"]');
-                if (allUserNodes.length > 0) {
-                    const last = allUserNodes[allUserNodes.length - 1];
-                    // Relaxed check: if userMatch implies it's the last *visual* one
-                    if (last !== userMatch && !last.contains(userMatch)) {
-                        // Double check text
-                        if (last.innerText.trim() !== newText) {
+                // We must be careful not to let the "Input Area" (which might have role="user")
+                // trick us into thinking the message above it is "history".
+
+                // 1. Get all potential user message nodes
+                const candidates = Array.from(document.querySelectorAll('.user-query-bubble-with-background, [data-message-author-role="user"]'));
+
+                // 2. Filter down to "Real" messages (exclude input box/drafts)
+                const realMessages = candidates.filter(n => {
+                    // Exclude input areas
+                    if (n.isContentEditable) return false;
+                    if (n.getAttribute('role') === 'textbox') return false;
+                    // Check for minimum text content to be a saved message
+                    if (!n.innerText || n.innerText.trim().length === 0) return false;
+                    return true;
+                });
+
+                if (realMessages.length > 0) {
+                    const last = realMessages[realMessages.length - 1];
+
+                    // Validation: Is 'userMatch' the Last (or inside the Last) node?
+                    const isLast = (userMatch === last) || (last.contains(userMatch));
+
+                    if (!isLast) {
+                        // Double check: Sometimes Gemini splits the new message into multiple nodes.
+                        // If userMatch is the *second to last* and the last one is identical text...
+                        // forcing a strict check might be too aggressive.
+                        // Let's rely on the Position Check:
+                        // If there is a "Real Message" strictly FOLLOWING this one, then ignore logic applies.
+
+                        const isStrictlyFollowed = realMessages.some(laterNode => {
+                            return (userMatch !== laterNode) &&
+                                (userMatch.compareDocumentPosition(laterNode) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+                                !userMatch.contains(laterNode); // Don't count children
+                        });
+
+                        if (isStrictlyFollowed) {
+                            // console.log("Artifact Sync: Ignoring history node (found newer message below).");
                             continue;
                         }
                     }
