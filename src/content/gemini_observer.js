@@ -277,13 +277,15 @@ function findResponseFallback(userNode) {
             if (pNext.tagName === 'PENDING-RESPONSE' || pNext.tagName === 'MODEL-RESPONSE') {
                 // CRITICAL FIX: If it is actually populated now, TAKE IT!
                 // Re-use calculated values
-                if (textLen > 20 || hasImgs) {
+                if (textLen > 50 || hasImgs) {
                     console.log(`Artifact Sync: PENDING-RESPONSE (Uncle) became valid (Len: ${textLen}). Capturing!`, pNext);
                     return pNext;
                 }
 
-                if (currentTurn.pendingFailures < 3) {
+                if (currentTurn.pendingFailures === 0) {
                     if (!pNext.getAttribute('data-as-failed')) pendingCandidate = pNext;
+                } else {
+                    console.log(`Artifact Sync: Ignoring empty PENDING-RESPONSE (Uncle) due to strikes (${currentTurn.pendingFailures}).`);
                 }
             }
 

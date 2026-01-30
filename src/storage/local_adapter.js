@@ -19,7 +19,7 @@ export class LocalAdapter {
             try {
                 console.log("Artifact Sync: Generating PDF (PDF Enabled)...");
                 const pdfBlob = await this.generatePdf(payload);
-                const pdfFilename = `${baseFolder}/${safePrompt}_${timestamp}.pdf`;
+                const pdfFilename = `${baseFolder}/pdfs/${safePrompt}_${timestamp}.pdf`;
                 await this.downloadBlob(pdfBlob, pdfFilename);
                 console.log("Artifact Sync: PDF saved.");
             } catch (err) {
